@@ -26,9 +26,32 @@ const INITIAL_POSITIONS = [
 // Default weekly revenue budget target and labor cost % goal
 const DEFAULT_BUDGET = { weeklyRevenue: 35000, laborPctGoal: 28 };
 
-const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const FULL_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+const DAYS      = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const FULL_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const DEFAULT_AVAILABILITY = Object.fromEntries(DAYS.map((_, i) => [i, "available"]));
+
+// Return the ISO date string (YYYY-MM-DD) for a given Date object
+const dateKey = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+// Get the Sunday-based weekStart for a given Date
+const getWeekStart = (d) => {
+  const dt = new Date(d);
+  dt.setHours(0, 0, 0, 0);
+  dt.setDate(dt.getDate() - dt.getDay()); // back to Sunday
+  return dt;
+};
+
+// Return the 7 date strings [Sun...Sat] for the week containing weekStart
+const weekDates = (weekStart) =>
+  Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart.getTime() + i * 86400000);
+    return dateKey(d);
+  });
 
 const INITIAL_STAFF = [
   { id: 1,  name: "Jordan Lee",    role: "manager",  password: "manager1",      positions: ["Bartender","Server"],   availability: DEFAULT_AVAILABILITY },
@@ -43,29 +66,33 @@ const INITIAL_STAFF = [
   { id: 10, name: "Morgan Walsh",  role: "employee", password: "KeenSpoon91",   positions: ["Host","Server"],         availability: DEFAULT_AVAILABILITY },
 ];
 
+// Seed shifts for the current week (Sun-based). Each shift stores a real date string.
+const _seedWeekStart = (() => { const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - d.getDay()); return d; })();
+const _sd = (offset) => { const d = new Date(_seedWeekStart.getTime() + offset * 86400000); const y = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,"0"); const day = String(d.getDate()).padStart(2,"0"); return `${y}-${m}-${day}`; };
+
 const INITIAL_SHIFTS = [
-  { id: 1,  staffId: 3,  day: 0, position: "Bartender",   start: "16:00", end: "23:00" },
-  { id: 2,  staffId: 4,  day: 0, position: "Server",      start: "17:00", end: "22:00" },
-  { id: 3,  staffId: 5,  day: 0, position: "Busser",      start: "17:00", end: "22:00" },
-  { id: 4,  staffId: 6,  day: 0, position: "Host",        start: "17:00", end: "22:00" },
-  { id: 5,  staffId: 7,  day: 1, position: "Server",      start: "11:00", end: "16:00" },
-  { id: 6,  staffId: 8,  day: 1, position: "Bartender",   start: "16:00", end: "23:00" },
-  { id: 7,  staffId: 9,  day: 1, position: "Food Runner", start: "17:00", end: "22:00" },
-  { id: 8,  staffId: 10, day: 1, position: "Host",        start: "17:00", end: "22:00" },
-  { id: 9,  staffId: 3,  day: 2, position: "Bartender",   start: "16:00", end: "23:00" },
-  { id: 10, staffId: 4,  day: 2, position: "Server",      start: "17:00", end: "22:00" },
-  { id: 11, staffId: 6,  day: 3, position: "Server",      start: "11:00", end: "16:00" },
-  { id: 12, staffId: 7,  day: 3, position: "Busser",      start: "17:00", end: "22:00" },
-  { id: 13, staffId: 8,  day: 4, position: "Bartender",   start: "16:00", end: "23:00" },
-  { id: 14, staffId: 9,  day: 4, position: "Food Runner", start: "17:00", end: "22:00" },
-  { id: 15, staffId: 5,  day: 5, position: "Busser",      start: "16:00", end: "23:00" },
-  { id: 16, staffId: 10, day: 5, position: "Host",        start: "16:00", end: "23:00" },
-  { id: 17, staffId: 3,  day: 5, position: "Bartender",   start: "16:00", end: "02:00" },
-  { id: 18, staffId: 4,  day: 5, position: "Server",      start: "16:00", end: "23:00" },
-  { id: 19, staffId: 7,  day: 6, position: "Server",      start: "10:00", end: "16:00" },
-  { id: 20, staffId: 8,  day: 6, position: "Bartender",   start: "16:00", end: "02:00" },
-  { id: 21, staffId: 9,  day: 6, position: "Food Runner", start: "16:00", end: "23:00" },
-  { id: 22, staffId: 6,  day: 6, position: "Host",        start: "16:00", end: "23:00" },
+  { id: 1,  staffId: 3,  date: _sd(1), position: "Bartender",   start: "16:00", end: "23:00" },
+  { id: 2,  staffId: 4,  date: _sd(1), position: "Server",      start: "17:00", end: "22:00" },
+  { id: 3,  staffId: 5,  date: _sd(1), position: "Busser",      start: "17:00", end: "22:00" },
+  { id: 4,  staffId: 6,  date: _sd(1), position: "Host",        start: "17:00", end: "22:00" },
+  { id: 5,  staffId: 7,  date: _sd(2), position: "Server",      start: "11:00", end: "16:00" },
+  { id: 6,  staffId: 8,  date: _sd(2), position: "Bartender",   start: "16:00", end: "23:00" },
+  { id: 7,  staffId: 9,  date: _sd(2), position: "Food Runner", start: "17:00", end: "22:00" },
+  { id: 8,  staffId: 10, date: _sd(2), position: "Host",        start: "17:00", end: "22:00" },
+  { id: 9,  staffId: 3,  date: _sd(3), position: "Bartender",   start: "16:00", end: "23:00" },
+  { id: 10, staffId: 4,  date: _sd(3), position: "Server",      start: "17:00", end: "22:00" },
+  { id: 11, staffId: 6,  date: _sd(4), position: "Server",      start: "11:00", end: "16:00" },
+  { id: 12, staffId: 7,  date: _sd(4), position: "Busser",      start: "17:00", end: "22:00" },
+  { id: 13, staffId: 8,  date: _sd(5), position: "Bartender",   start: "16:00", end: "23:00" },
+  { id: 14, staffId: 9,  date: _sd(5), position: "Food Runner", start: "17:00", end: "22:00" },
+  { id: 15, staffId: 5,  date: _sd(6), position: "Busser",      start: "16:00", end: "23:00" },
+  { id: 16, staffId: 10, date: _sd(6), position: "Host",        start: "16:00", end: "23:00" },
+  { id: 17, staffId: 3,  date: _sd(6), position: "Bartender",   start: "16:00", end: "02:00" },
+  { id: 18, staffId: 4,  date: _sd(6), position: "Server",      start: "16:00", end: "23:00" },
+  { id: 19, staffId: 7,  date: _sd(0), position: "Server",      start: "10:00", end: "16:00" },
+  { id: 20, staffId: 8,  date: _sd(0), position: "Bartender",   start: "16:00", end: "02:00" },
+  { id: 21, staffId: 9,  date: _sd(0), position: "Food Runner", start: "16:00", end: "23:00" },
+  { id: 22, staffId: 6,  date: _sd(0), position: "Host",        start: "16:00", end: "23:00" },
 ];
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -108,9 +135,14 @@ const AVAIL_CONFIG = {
 
 // ─── PRINT ────────────────────────────────────────────────────────────────────
 
-function printSchedule({ shifts, staff, weekLabel, POSITIONS, POSITION_COLORS }) {
+function printSchedule({ shifts, staff, weekLabel, POSITIONS, POSITION_COLORS, weekStart }) {
   const getStaff = (id) => staff.find(s => s.id === id);
   const posClass = (pos) => ({ Bartender:"bart", Server:"serv", Busser:"buss", Host:"host", "Food Runner":"runner" }[pos] || "");
+  const wDates = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(weekStart.getTime() + i * 86400000);
+    const y = d.getFullYear(); const m = String(d.getMonth()+1).padStart(2,"0"); const day = String(d.getDate()).padStart(2,"0");
+    return { key: `${y}-${m}-${day}`, label: DAYS[i], date: d.getDate() };
+  });
   const html = `<!DOCTYPE html><html><head><title>Tableside Schedule – ${weekLabel}</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600&display=swap');
@@ -142,18 +174,18 @@ td{padding:5px 8px;border:1px solid #eee;vertical-align:top}tr:nth-child(even) t
 </style></head><body>
 <div class="hdr"><div><div class="brand">🍽 <span>TABLESIDE</span></div><div class="week-lbl">Weekly Schedule: ${weekLabel}</div></div>
 <div class="gen">Printed ${new Date().toLocaleDateString("en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"})}</div></div>
-<div class="grid">${DAYS.map((day,i)=>{
-  const ds=shifts.filter(s=>s.day===i).sort((a,b)=>a.start.localeCompare(b.start));
-  return `<div class="dc"><div class="dh"><div class="dn">${day}</div></div><div class="ds">
+<div class="grid">${wDates.map(({key, label, date})=>{
+  const ds=shifts.filter(s=>s.date===key).sort((a,b)=>a.start.localeCompare(b.start));
+  return `<div class="dc"><div class="dh"><div class="dn">${label} ${date}</div></div><div class="ds">
   ${ds.length===0?'<div class="empty">No shifts</div>':ds.map(s=>{const emp=getStaff(s.staffId);return`<div class="sc ${posClass(s.position)}"><div class="sp">${s.position}</div><div class="sn">${emp?.name||"—"}</div><div class="st">${fmt12(s.start)} – ${fmt12(s.end)}</div></div>`;}).join("")}
   </div></div>`;}).join("")}</div>
 <div class="sum-title">Staff Summary</div>
-<table><thead><tr><th>Name</th>${DAYS.map(d=>`<th>${d}</th>`).join("")}<th>Shifts</th><th>Est. Hrs</th></tr></thead>
+<table><thead><tr><th>Name</th>${wDates.map(({label,date})=>`<th>${label} ${date}</th>`).join("")}<th>Shifts</th><th>Est. Hrs</th></tr></thead>
 <tbody>${staff.filter(s=>s.role==="employee").map(emp=>{
   const es=shifts.filter(s=>s.staffId===emp.id);
   const hrs=es.reduce((a,s)=>a+shiftHours(s),0);
   return`<tr><td><strong>${emp.name}</strong><br><span style="font-size:9px;color:#888">${emp.positions.join(", ")}</span></td>
-  ${DAYS.map((_,i)=>{const ds=es.filter(s=>s.day===i);return`<td>${ds.map(s=>`<div style="font-size:9px">${s.position}<br>${fmt12(s.start)}–${fmt12(s.end)}</div>`).join("")||"–"}</td>`;}).join("")}
+  ${wDates.map(({key})=>{const ds=es.filter(s=>s.date===key);return`<td>${ds.map(s=>`<div style="font-size:9px">${s.position}<br>${fmt12(s.start)}–${fmt12(s.end)}</div>`).join("")||"–"}</td>`;}).join("")}
   <td style="text-align:center"><strong>${es.length}</strong></td><td style="text-align:center"><strong>${hrs.toFixed(1)}</strong></td></tr>`;
 }).join("")}</tbody></table>
 <div class="legend">${POSITIONS.map(p=>`<div class="li"><div class="ld" style="background:${POSITION_COLORS[p].print}"></div><span>${p}</span></div>`).join("")}</div>
@@ -164,12 +196,15 @@ td{padding:5px 8px;border:1px solid #eee;vertical-align:top}tr:nth-child(even) t
 // ─── LABOR COST CALCULATIONS ─────────────────────────────────────────────────
 
 function calcLaborCosts(shifts, staff, wages, POSITIONS) {
-  const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const byDay = days.map((_, i) => {
-    const dayShifts = shifts.filter(s => s.day === i);
+  // Group by date, sorted
+  const allDates = [...new Set(shifts.map(s => s.date))].sort();
+  const byDay = allDates.map(date => {
+    const dayShifts = shifts.filter(s => s.date === date);
     const cost = dayShifts.reduce((acc, s) => acc + shiftHours(s) * (wages[s.position] || 0), 0);
     const hours = dayShifts.reduce((acc, s) => acc + shiftHours(s), 0);
-    return { day: days[i], cost, hours, shifts: dayShifts.length };
+    const d = new Date(date + "T00:00:00");
+    const label = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    return { day: label, date, cost, hours, shifts: dayShifts.length };
   });
 
   const byPosition = POSITIONS.map(p => {
@@ -220,8 +255,8 @@ export default function App() {
 
   const isManager = currentUser.role === "manager";
 
-  const handleChangePassword = (newPassword) => {
-    const updated = { ...currentUser, password: newPassword, mustChangePassword: false };
+  const handleChangePassword = (newPassword, email) => {
+    const updated = { ...currentUser, password: newPassword, mustChangePassword: false, ...(email !== undefined ? { email } : {}) };
     setStaff(s => s.map(x => x.id === currentUser.id ? updated : x));
     setCurrentUser(updated);
     setChangePasswordModal(false);
@@ -241,11 +276,13 @@ export default function App() {
   ).length;
 
   const today = new Date();
-  const weekStart = new Date(today);
-  weekStart.setDate(today.getDate() - today.getDay() + 1 + weekOffset * 7);
+  const weekStart = getWeekStart(today);
+  weekStart.setDate(weekStart.getDate() + weekOffset * 7);
+  const weekEnd = new Date(weekStart.getTime() + 6 * 86400000);
   const weekLabel =
     weekStart.toLocaleDateString("en-US", { month: "long", day: "numeric" }) + " – " +
-    new Date(weekStart.getTime() + 6 * 86400000).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+    weekEnd.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  const currentWeekDates = weekDates(weekStart);
 
   const handleAddShift    = (s) => { setShifts(p => [...p, { ...s, id: uid() }]); setShiftModal(null); };
   const handleEditShift   = (s) => { setShifts(p => p.map(x => x.id === s.id ? s : x)); setShiftModal(null); };
@@ -300,7 +337,8 @@ export default function App() {
         return x;
       }));
     } else if (req?.type === "timeoff") {
-      setShifts(s => s.filter(x => !(x.staffId === req.staffId && req.days.includes(x.day))));
+      // Remove shifts on the exact requested dates for this employee
+      setShifts(s => s.filter(x => !(x.staffId === req.staffId && (req.dates || []).includes(x.date))));
     }
     setRequests(r => r.map(x => x.id === id ? { ...x, status: "approved" } : x));
   };
@@ -310,7 +348,7 @@ export default function App() {
     setAvailModal(false);
   };
 
-  const myShifts = shifts.filter(s => s.staffId === currentUser.id);
+  const myShifts = shifts.filter(s => currentWeekDates.includes(s.date) && s.staffId === currentUser.id);
   const myAvailability = staff.find(s => s.id === currentUser.id)?.availability || DEFAULT_AVAILABILITY;
 
   const navItems = [
@@ -350,6 +388,7 @@ export default function App() {
             <div>
               <div style={{ fontSize: "0.82rem", fontWeight: "500" }}>{currentUser.name}</div>
               <div style={{ fontSize: "0.68rem", color: "#666", textTransform: "capitalize" }}>{currentUser.role}</div>
+              {currentUser.email && <div style={{ fontSize: "0.65rem", color: "#444" }}>{currentUser.email}</div>}
             </div>
           </div>
           {!isManager && <button style={S.greenChipBtn} onClick={() => setAvailModal(true)}>🗓 Availability</button>}
@@ -365,14 +404,16 @@ export default function App() {
             filterPos={filterPos} setFilterPos={setFilterPos}
             weekOffset={weekOffset} setWeekOffset={setWeekOffset}
             weekLabel={weekLabel} weekStart={weekStart} today={today}
+            currentWeekDates={currentWeekDates}
             requests={requests}
-            onAddShift={(day) => setShiftModal({ mode: "add", day })}
+            onAddShift={(date) => setShiftModal({ mode: "add", date })}
             onEditShift={(shift) => setShiftModal({ mode: "edit", shift })}
-            onPrint={() => printSchedule({ shifts, staff, weekLabel, POSITIONS, POSITION_COLORS })} />
+            onPrint={() => printSchedule({ shifts: shifts.filter(s => currentWeekDates.includes(s.date)), staff, weekLabel, POSITIONS, POSITION_COLORS, weekStart })} />
         )}
         {view === "mySchedule" && (
           <MyScheduleView shifts={myShifts} currentUser={currentUser} requests={requests}
             availability={myAvailability} POSITION_COLORS={POSITION_COLORS}
+            weekLabel={weekLabel} currentWeekDates={currentWeekDates}
             onRequestTimeOff={() => setRequestModal({ type: "timeoff" })}
             onRequestTrade={(shift) => setRequestModal({ type: "trade", shift })}
             onEditAvailability={() => setAvailModal(true)} />
@@ -403,8 +444,9 @@ export default function App() {
       </main>
 
       {shiftModal && (
-        <ShiftModal mode={shiftModal.mode} shift={shiftModal.shift} day={shiftModal.day} staff={staff}
+        <ShiftModal mode={shiftModal.mode} shift={shiftModal.shift} date={shiftModal.date} staff={staff}
           POSITIONS={POSITIONS} POSITION_COLORS={POSITION_COLORS}
+          currentWeekDates={currentWeekDates}
           onSave={shiftModal.mode === "add" ? handleAddShift : handleEditShift}
           onDelete={handleDeleteShift} onClose={() => setShiftModal(null)} />
       )}
@@ -1171,9 +1213,10 @@ function PositionModal({ mode, pos, COLOR_POOL, existingNames, onSave, onClose }
 
 // ─── SCHEDULE VIEW ────────────────────────────────────────────────────────────
 
-function ScheduleView({ shifts, staff, isManager, POSITIONS, POSITION_COLORS, filterPos, setFilterPos, weekOffset, setWeekOffset, weekLabel, weekStart, today, onAddShift, onEditShift, onPrint, requests }) {
+function ScheduleView({ shifts, staff, isManager, POSITIONS, POSITION_COLORS, filterPos, setFilterPos, weekOffset, setWeekOffset, weekLabel, weekStart, today, currentWeekDates, onAddShift, onEditShift, onPrint, requests }) {
   const filtered = filterPos === "All" ? shifts : shifts.filter(s => s.position === filterPos);
   const getStaff = (id) => staff.find(s => s.id === id);
+  const todayKey = dateKey(today);
 
   return (
     <div style={S.viewWrap}>
@@ -1192,22 +1235,23 @@ function ScheduleView({ shifts, staff, isManager, POSITIONS, POSITION_COLORS, fi
         </div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7,1fr)", gap: "6px", marginBottom: "14px" }}>
-        {DAYS.map((day, i) => {
-          const ds = filtered.filter(s => s.day === i).sort((a, b) => a.start.localeCompare(b.start));
-          const date = new Date(weekStart.getTime() + i * 86400000);
-          const isToday = date.toDateString() === today.toDateString() && weekOffset === 0;
+        {currentWeekDates.map((dateStr, i) => {
+          const ds = filtered.filter(s => s.date === dateStr).sort((a, b) => a.start.localeCompare(b.start));
+          const isToday = dateStr === todayKey;
+          const dateObj = new Date(dateStr + "T00:00:00");
           return (
-            <div key={day} style={{ ...S.dayCol, ...(isToday ? { border: "1px solid #F59E0B55" } : {}) }}>
+            <div key={dateStr} style={{ ...S.dayCol, ...(isToday ? { border: "1px solid #F59E0B55" } : {}) }}>
               <div style={S.dayHeader}>
-                <span style={S.dayName}>{day}</span>
-                <span style={{ ...S.dayDate, ...(isToday ? { background: "#F59E0B", color: "#0A0A0A", fontWeight: "700" } : {}) }}>{date.getDate()}</span>
+                <span style={S.dayName}>{DAYS[i]}</span>
+                <span style={{ ...S.dayDate, ...(isToday ? { background: "#F59E0B", color: "#0A0A0A", fontWeight: "700" } : {}) }}>{dateObj.getDate()}</span>
               </div>
               <div style={{ padding: "6px", display: "flex", flexDirection: "column", gap: "5px" }}>
                 {ds.length === 0 && <div style={{ fontSize: "0.72rem", color: "#2A2A2A", textAlign: "center", padding: "10px 0" }}>No shifts</div>}
                 {ds.map(shift => {
                   const emp = getStaff(shift.staffId);
                   const c = POSITION_COLORS[shift.position];
-                  const avail = emp?.availability?.[i];
+                  const dow = new Date(dateStr + "T00:00:00").getDay(); // 0=Sun
+                  const avail = emp?.availability?.[dow];
                   return (
                     <div key={shift.id} style={{ ...S.shiftCard, background: c.bg, border: `1px solid ${c.dot}22` }} onClick={() => isManager && onEditShift(shift)}>
                       <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "0.68rem", fontWeight: "600", marginBottom: "2px", color: c.text }}>
@@ -1225,7 +1269,7 @@ function ScheduleView({ shifts, staff, isManager, POSITIONS, POSITION_COLORS, fi
                     </div>
                   );
                 })}
-                {isManager && <button style={S.addShiftBtn} onClick={() => onAddShift(i)}>+ Add Shift</button>}
+                {isManager && <button style={S.addShiftBtn} onClick={() => onAddShift(dateStr)}>+ Add Shift</button>}
               </div>
             </div>
           );
@@ -1250,7 +1294,7 @@ function ScheduleView({ shifts, staff, isManager, POSITIONS, POSITION_COLORS, fi
 
 // ─── MY SCHEDULE VIEW ─────────────────────────────────────────────────────────
 
-function MyScheduleView({ shifts, currentUser, requests, availability, POSITION_COLORS, onRequestTimeOff, onRequestTrade, onEditAvailability }) {
+function MyScheduleView({ shifts, currentUser, requests, availability, POSITION_COLORS, weekLabel, currentWeekDates, onRequestTimeOff, onRequestTrade, onEditAvailability }) {
   const myRequests = requests.filter(r => r.staffId === currentUser.id || r.targetStaffId === currentUser.id);
   const totalHours = shifts.reduce((acc, s) => acc + shiftHours(s), 0);
   return (
@@ -1258,7 +1302,7 @@ function MyScheduleView({ shifts, currentUser, requests, availability, POSITION_
       <div style={{ display: "flex", alignItems: "center", gap: "14px", marginBottom: "22px", flexWrap: "wrap" }}>
         <div>
           <h2 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "1.5rem" }}>My Schedule</h2>
-          <p style={{ fontSize: "0.8rem", color: "#555", marginTop: "2px" }}>This week</p>
+          <p style={{ fontSize: "0.8rem", color: "#555", marginTop: "2px" }}>{weekLabel}</p>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", alignItems: "center", padding: "7px 18px", background: "#F59E0B11", borderRadius: "9px", border: "1px solid #F59E0B33" }}>
           <span style={{ fontFamily: "'DM Serif Display',serif", fontSize: "1.4rem", color: "#F59E0B", lineHeight: 1 }}>{totalHours.toFixed(1)}</span>
@@ -1268,14 +1312,17 @@ function MyScheduleView({ shifts, currentUser, requests, availability, POSITION_
         <button style={{ ...S.saveBtn, background: "#7C3AED", padding: "9px 18px" }} onClick={onRequestTimeOff}>Request Time Off</button>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: "7px", marginBottom: "22px" }}>
-        {DAYS.map((day, i) => {
-          const dayShifts = shifts.filter(s => s.day === i);
-          const av = availability[i] || "available";
+        {currentWeekDates.map((dateStr, i) => {
+          const dayShifts = shifts.filter(s => s.date === dateStr);
+          const dow = new Date(dateStr + "T00:00:00").getDay(); // 0=Sun
+          const av = availability[dow] || "available";
           const ac = AVAIL_CONFIG[av];
+          const dateObj = new Date(dateStr + "T00:00:00");
+          const dayLabel = dateObj.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
           return (
-            <div key={day} style={{ display: "flex", gap: "14px", alignItems: "flex-start", padding: "12px 16px", background: "#0F0F0F", borderRadius: "9px", border: "1px solid #1A1A1A" }}>
-              <div style={{ width: "130px", flexShrink: 0 }}>
-                <div style={{ fontSize: "0.82rem", fontWeight: "600", color: "#888", marginBottom: "5px" }}>{FULL_DAYS[i]}</div>
+            <div key={dateStr} style={{ display: "flex", gap: "14px", alignItems: "flex-start", padding: "12px 16px", background: "#0F0F0F", borderRadius: "9px", border: "1px solid #1A1A1A" }}>
+              <div style={{ width: "150px", flexShrink: 0 }}>
+                <div style={{ fontSize: "0.82rem", fontWeight: "600", color: "#888", marginBottom: "5px" }}>{dayLabel}</div>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: "3px", padding: "2px 8px", borderRadius: "10px", fontSize: "0.68rem", fontWeight: "500", background: ac.bg, color: ac.color }}>
                   {ac.icon} {ac.label}
                 </span>
@@ -1472,8 +1519,8 @@ function RequestsView({ requests, staff, shifts, currentUser, isManager, onAppro
                     <div style={S.reqAvatar}>{initials(requester)}</div>
                     <div>
                       <div style={{ fontSize: "0.88rem", fontWeight: "600", marginBottom: "3px" }}>{requester}</div>
-                      {req.type === "timeoff" && req.days && <div style={{ fontSize: "0.78rem", color: "#777" }}>Requesting off: {req.days.map(d => FULL_DAYS[d]).join(", ")}</div>}
-                      {req.type === "trade" && shift && <div style={{ fontSize: "0.78rem", color: "#777" }}>Shift: {FULL_DAYS[shift.day]} · {fmt12(shift.start)}–{fmt12(shift.end)} · {shift.position}</div>}
+                      {req.type === "timeoff" && req.dates && <div style={{ fontSize: "0.78rem", color: "#777" }}>Requesting off: {req.dates.map(key => { const [y,m,d] = key.split("-").map(Number); return new Date(y,m-1,d).toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"}); }).join(", ")}</div>}
+                      {req.type === "trade" && shift && <div style={{ fontSize: "0.78rem", color: "#777" }}>Shift: {shift.date ? new Date(shift.date+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"}) : ""} · {fmt12(shift.start)}–{fmt12(shift.end)} · {shift.position}</div>}
                       {req.note && <div style={{ fontSize: "0.78rem", color: "#555", fontStyle: "italic", marginTop: "4px" }}>"{req.note}"</div>}
                     </div>
                   </div>
@@ -1484,7 +1531,7 @@ function RequestsView({ requests, staff, shifts, currentUser, isManager, onAppro
                         <div style={S.reqAvatar}>{initials(getStaffName(req.targetStaffId))}</div>
                         <div>
                           <div style={{ fontSize: "0.88rem", fontWeight: "600", marginBottom: "3px" }}>{getStaffName(req.targetStaffId)}</div>
-                          {targetShift && <div style={{ fontSize: "0.78rem", color: "#777" }}>Shift: {FULL_DAYS[targetShift.day]} · {fmt12(targetShift.start)}–{fmt12(targetShift.end)} · {targetShift.position}</div>}
+                          {targetShift && <div style={{ fontSize: "0.78rem", color: "#777" }}>Shift: {targetShift.date ? new Date(targetShift.date+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"}) : ""} · {fmt12(targetShift.start)}–{fmt12(targetShift.end)} · {targetShift.position}</div>}
                         </div>
                       </div>
                     </div>
@@ -1507,12 +1554,19 @@ function RequestsView({ requests, staff, shifts, currentUser, isManager, onAppro
 
 // ─── SHIFT MODAL ──────────────────────────────────────────────────────────────
 
-function ShiftModal({ mode, shift, day, staff, POSITIONS, POSITION_COLORS, onSave, onDelete, onClose }) {
-  const [form, setForm] = useState(shift || { staffId: "", day: day ?? 0, position: POSITIONS[0], start: "17:00", end: "22:00" });
+function ShiftModal({ mode, shift, date, staff, POSITIONS, POSITION_COLORS, currentWeekDates, onSave, onDelete, onClose }) {
+  const [form, setForm] = useState(shift || { staffId: "", date: date ?? currentWeekDates[0], position: POSITIONS[0], start: "17:00", end: "22:00" });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const eligible = staff.filter(s => s.positions.includes(form.position));
   const selectedEmp = eligible.find(s => s.id === Number(form.staffId));
-  const empAvail = selectedEmp?.availability?.[form.day];
+  const dow = form.date ? new Date(form.date + "T00:00:00").getDay() : 0; // 0=Sun
+  const empAvail = selectedEmp?.availability?.[dow];
+
+  const fmtDateOption = (dateStr) => {
+    const d = new Date(dateStr + "T00:00:00");
+    return d.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" });
+  };
+
   return (
     <div style={S.modalOverlay} onClick={onClose}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
@@ -1522,9 +1576,11 @@ function ShiftModal({ mode, shift, day, staff, POSITIONS, POSITION_COLORS, onSav
         </div>
         <div style={S.modalBody}>
           <div style={S.formRow}>
-            <label style={S.formLabel}>Day</label>
-            <select style={S.formSelect} value={form.day} onChange={e => set("day", Number(e.target.value))}>
-              {FULL_DAYS.map((d, i) => <option key={i} value={i}>{d}</option>)}
+            <label style={S.formLabel}>Date</label>
+            <select style={S.formSelect} value={form.date} onChange={e => set("date", e.target.value)}>
+              {currentWeekDates.map(d => (
+                <option key={d} value={d}>{fmtDateOption(d)}</option>
+              ))}
             </select>
           </div>
           <div style={S.formRow}>
@@ -1538,7 +1594,7 @@ function ShiftModal({ mode, shift, day, staff, POSITIONS, POSITION_COLORS, onSav
             <select style={S.formSelect} value={form.staffId} onChange={e => set("staffId", Number(e.target.value))}>
               <option value="">— Select —</option>
               {eligible.map(s => {
-                const av = s.availability?.[form.day] || "available";
+                const av = s.availability?.[dow] || "available";
                 return <option key={s.id} value={s.id}>{s.name}{av === "preferred" ? " ★" : av === "unavailable" ? " ✗" : ""}</option>;
               })}
             </select>
@@ -1572,35 +1628,167 @@ function ShiftModal({ mode, shift, day, staff, POSITIONS, POSITION_COLORS, onSav
 
 // ─── REQUEST MODAL ────────────────────────────────────────────────────────────
 
+// ─── CALENDAR PICKER (for time-off requests) ─────────────────────────────────
+
+function CalendarPicker({ selectedDates, onChange }) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const [viewYear,  setViewYear]  = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+
+  const toKey = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  const prevMonth = () => {
+    if (viewMonth === 0) { setViewMonth(11); setViewYear(y => y - 1); }
+    else setViewMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (viewMonth === 11) { setViewMonth(0); setViewYear(y => y + 1); }
+    else setViewMonth(m => m + 1);
+  };
+
+  const toggleDate = (key) => {
+    onChange(selectedDates.includes(key)
+      ? selectedDates.filter(d => d !== key)
+      : [...selectedDates, key].sort()
+    );
+  };
+
+  // Build calendar grid
+  const firstDay = new Date(viewYear, viewMonth, 1);
+  const lastDay  = new Date(viewYear, viewMonth + 1, 0);
+  // Start grid on Monday
+  let startOffset = firstDay.getDay() - 1;
+  if (startOffset < 0) startOffset = 6;
+
+  const cells = [];
+  for (let i = 0; i < startOffset; i++) cells.push(null);
+  for (let d = 1; d <= lastDay.getDate(); d++) cells.push(new Date(viewYear, viewMonth, d));
+
+  const monthLabel = new Date(viewYear, viewMonth, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const DAY_HEADERS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+
+  return (
+    <div style={{ background: "#0A0A0A", borderRadius: "10px", border: "1px solid #2A2A2A", padding: "14px" }}>
+      {/* Month navigation */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+        <button onClick={prevMonth} style={{ ...S.weekNavBtn, width: "26px", height: "26px", fontSize: "0.9rem" }}>‹</button>
+        <span style={{ fontFamily: "'DM Serif Display',serif", fontSize: "0.95rem", color: "#F5F0E8" }}>{monthLabel}</span>
+        <button onClick={nextMonth} style={{ ...S.weekNavBtn, width: "26px", height: "26px", fontSize: "0.9rem" }}>›</button>
+      </div>
+
+      {/* Day headers */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "3px", marginBottom: "4px" }}>
+        {DAY_HEADERS.map(d => (
+          <div key={d} style={{ textAlign: "center", fontSize: "0.65rem", color: "#444", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.06em", padding: "2px 0" }}>{d}</div>
+        ))}
+      </div>
+
+      {/* Date grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "3px" }}>
+        {cells.map((date, i) => {
+          if (!date) return <div key={`empty-${i}`} />;
+          const key = toKey(date);
+          const isSelected = selectedDates.includes(key);
+          const isToday = toKey(date) === toKey(today);
+          const isPast = date < today;
+
+          return (
+            <button
+              key={key}
+              onClick={() => toggleDate(key)}
+              style={{
+                padding: "6px 2px",
+                borderRadius: "6px",
+                border: isToday && !isSelected ? "1px solid #F59E0B55" : "1px solid transparent",
+                background: isSelected ? "#7C3AED" : isPast ? "transparent" : "#111",
+                color: isSelected ? "#F5F0E8" : isPast ? "#333" : isToday ? "#F59E0B" : "#AAA",
+                cursor: isPast ? "default" : "pointer",
+                fontSize: "0.8rem",
+                fontFamily: "'DM Sans',sans-serif",
+                fontWeight: isSelected ? "600" : "400",
+                textAlign: "center",
+                transition: "all 0.1s",
+                opacity: isPast ? 0.4 : 1,
+              }}
+            >
+              {date.getDate()}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Selected count summary */}
+      {selectedDates.length > 0 && (
+        <div style={{ marginTop: "12px", padding: "8px 10px", background: "#7C3AED18", borderRadius: "7px", border: "1px solid #7C3AED33", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: "0.78rem", color: "#C4B5FD" }}>
+            {selectedDates.length} day{selectedDates.length !== 1 ? "s" : ""} selected
+          </span>
+          <button
+            onClick={() => onChange([])}
+            style={{ background: "none", border: "none", color: "#7C3AED", cursor: "pointer", fontSize: "0.72rem", fontFamily: "'DM Sans',sans-serif" }}>
+            Clear all
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── REQUEST MODAL ────────────────────────────────────────────────────────────
+
 function RequestModal({ type, shift, currentUser, shifts, staff, onSubmit, onClose }) {
-  const [selectedDays, setSelectedDays] = useState([]);
+  const [selectedDates, setSelectedDates] = useState([]); // array of "YYYY-MM-DD" strings
   const [note, setNote] = useState("");
   const [targetStaffId, setTargetStaffId] = useState("");
   const [targetShiftId, setTargetShiftId] = useState("");
-  const toggleDay = (d) => setSelectedDays(p => p.includes(d) ? p.filter(x => x !== d) : [...p, d]);
+
   const eligible = shifts.filter(s => s.staffId !== currentUser.id && (targetStaffId ? s.staffId === Number(targetStaffId) : true));
-  const valid = type === "timeoff" ? selectedDays.length > 0 : (targetStaffId && targetShiftId);
+  const valid = type === "timeoff" ? selectedDates.length > 0 : (targetStaffId && targetShiftId);
+
+  const fmtDateKey = (key) => {
+    const [y, m, d] = key.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  };
+
   return (
     <div style={S.modalOverlay} onClick={onClose}>
-      <div style={S.modal} onClick={e => e.stopPropagation()}>
+      <div style={{ ...S.modal, maxWidth: type === "timeoff" ? "480px" : "460px" }} onClick={e => e.stopPropagation()}>
         <div style={S.modalHeader}>
           <h3 style={S.modalTitle}>{type === "timeoff" ? "🏖 Request Time Off" : "🔄 Request Shift Trade"}</h3>
           <button style={S.modalClose} onClick={onClose}>✕</button>
         </div>
         <div style={S.modalBody}>
           {type === "timeoff" ? (
-            <div style={S.formRow}>
-              <label style={S.formLabel}>Select days to request off</label>
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                {DAYS.map((d, i) => <button key={d} style={{ ...S.dayToggle, ...(selectedDays.includes(i) ? { background: "#7C3AED22", color: "#C4B5FD", border: "1px solid #7C3AED55" } : {}) }} onClick={() => toggleDay(i)}>{d}</button>)}
+            <>
+              <div style={S.formRow}>
+                <label style={S.formLabel}>Select dates to request off</label>
+                <CalendarPicker selectedDates={selectedDates} onChange={setSelectedDates} />
               </div>
-            </div>
+              {selectedDates.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "5px" }}>
+                  {selectedDates.map(key => (
+                    <span key={key} style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 9px", borderRadius: "12px", background: "#7C3AED22", color: "#C4B5FD", border: "1px solid #7C3AED44", fontSize: "0.75rem" }}>
+                      {fmtDateKey(key)}
+                      <button onClick={() => setSelectedDates(d => d.filter(x => x !== key))}
+                        style={{ background: "none", border: "none", color: "#7C3AED", cursor: "pointer", fontSize: "0.8rem", lineHeight: 1, padding: 0 }}>×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </>
           ) : (
             <>
               <div style={S.formRow}>
                 <label style={S.formLabel}>Your shift</label>
                 <div style={{ background: "#0A0A0A", color: "#777", border: "1px solid #1A1A1A", borderRadius: "7px", padding: "8px 11px", fontSize: "0.8rem" }}>
-                  {shift && `${FULL_DAYS[shift.day]} · ${fmt12(shift.start)} – ${fmt12(shift.end)} · ${shift.position}`}
+                  {shift && `${shift.date ? new Date(shift.date+"T00:00:00").toLocaleDateString("en-US",{weekday:"long",month:"short",day:"numeric"}) : ""} · ${fmt12(shift.start)} – ${fmt12(shift.end)} · ${shift.position}`}
                 </div>
               </div>
               <div style={S.formRow}>
@@ -1615,7 +1803,7 @@ function RequestModal({ type, shift, currentUser, shifts, staff, onSubmit, onClo
                   <label style={S.formLabel}>Their shift to swap</label>
                   <select style={S.formSelect} value={targetShiftId} onChange={e => setTargetShiftId(e.target.value)}>
                     <option value="">— Select shift —</option>
-                    {eligible.map(s => <option key={s.id} value={s.id}>{FULL_DAYS[s.day]} · {fmt12(s.start)}–{fmt12(s.end)} · {s.position}</option>)}
+                    {eligible.map(s => <option key={s.id} value={s.id}>{s.date ? new Date(s.date+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"}) : ""} · {fmt12(s.start)}–{fmt12(s.end)} · {s.position}</option>)}
                   </select>
                 </div>
               )}
@@ -1623,13 +1811,13 @@ function RequestModal({ type, shift, currentUser, shifts, staff, onSubmit, onClo
           )}
           <div style={S.formRow}>
             <label style={S.formLabel}>Note (optional)</label>
-            <textarea style={S.formTextarea} value={note} onChange={e => setNote(e.target.value)} placeholder="Add a reason..." rows={3} />
+            <textarea style={S.formTextarea} value={note} onChange={e => setNote(e.target.value)} placeholder="Add a reason..." rows={2} />
           </div>
         </div>
         <div style={S.modalFooter}>
           <button style={S.cancelBtn} onClick={onClose}>Cancel</button>
           <button style={{ ...S.saveBtn, opacity: valid ? 1 : 0.4 }} disabled={!valid}
-            onClick={() => onSubmit({ staffId: currentUser.id, type, note, ...(type === "timeoff" ? { days: selectedDays } : { shiftId: shift.id, targetStaffId: Number(targetStaffId), targetShiftId: Number(targetShiftId) }) })}>
+            onClick={() => onSubmit({ staffId: currentUser.id, type, note, ...(type === "timeoff" ? { dates: selectedDates } : { shiftId: shift.id, targetStaffId: Number(targetStaffId), targetShiftId: Number(targetShiftId) }) })}>
             Submit Request
           </button>
         </div>
@@ -1641,27 +1829,50 @@ function RequestModal({ type, shift, currentUser, shifts, staff, onSubmit, onClo
 // ─── FORCE CHANGE PASSWORD SCREEN ────────────────────────────────────────────
 
 function ForceChangePasswordScreen({ currentUser, onSave }) {
-  const [newPw, setNewPw]     = useState("");
+  const [email, setEmail]         = useState("");
+  const [newPw, setNewPw]         = useState("");
   const [confirmPw, setConfirmPw] = useState("");
-  const [showNew, setShowNew]     = useState(false);
+  const [showNew, setShowNew]         = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
-  const tooShort  = newPw.length > 0 && newPw.length < 8;
-  const mismatch  = confirmPw.length > 0 && newPw !== confirmPw;
-  const valid     = newPw.length >= 8 && newPw === confirmPw;
+  const emailInvalid = email.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const tooShort     = newPw.length > 0 && newPw.length < 8;
+  const mismatch     = confirmPw.length > 0 && newPw !== confirmPw;
+  const valid        = email.length > 0 && !emailInvalid && newPw.length >= 8 && newPw === confirmPw;
+
+  const pwScore = Math.min(4, Math.floor(newPw.length / 3));
+  const pwColor = pwScore <= 1 ? "#DC2626" : pwScore === 2 ? "#F59E0B" : "#059669";
+  const pwLabel = newPw.length < 8 ? "Too short" : newPw.length < 12 ? "Fair" : newPw.length < 16 ? "Good" : "Strong";
 
   return (
     <div style={S.loginWrap}>
       <style>{globalStyles}</style>
-      <div style={{ ...S.loginCard, maxWidth: "400px", gap: "14px" }}>
+      <div style={{ ...S.loginCard, maxWidth: "420px", gap: "14px" }}>
         <div style={{ fontSize: "2rem" }}>🔑</div>
-        <h2 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "1.5rem", color: "#F59E0B", textAlign: "center" }}>Set Your Password</h2>
+        <h2 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "1.5rem", color: "#F59E0B", textAlign: "center" }}>Set Up Your Account</h2>
         <p style={{ fontSize: "0.8rem", color: "#555", textAlign: "center", lineHeight: 1.6 }}>
-          Welcome, <strong style={{ color: "#F5F0E8" }}>{currentUser.name}</strong>! Your account was created with a temporary password. Please set a new password before continuing.
+          Welcome, <strong style={{ color: "#F5F0E8" }}>{currentUser.name}</strong>! Please add your email and set a new password before continuing.
         </p>
 
         <div style={{ height: "1px", background: "#1E1E1E", width: "100%" }} />
 
+        {/* Email */}
+        <div style={{ ...S.formRow, width: "100%" }}>
+          <label style={S.formLabel}>Email Address</label>
+          <input
+            type="email"
+            style={{ ...S.formInput, width: "100%", borderColor: emailInvalid ? "#DC2626" : undefined }}
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            autoFocus
+          />
+          {emailInvalid && <span style={{ fontSize: "0.72rem", color: "#FCA5A5" }}>Please enter a valid email address.</span>}
+        </div>
+
+        <div style={{ height: "1px", background: "#1E1E1E", width: "100%" }} />
+
+        {/* New password */}
         <div style={{ ...S.formRow, width: "100%" }}>
           <label style={S.formLabel}>New Password</label>
           <div style={{ position: "relative" }}>
@@ -1671,7 +1882,6 @@ function ForceChangePasswordScreen({ currentUser, onSave }) {
               value={newPw}
               onChange={e => setNewPw(e.target.value)}
               placeholder="At least 8 characters"
-              autoFocus
             />
             <button onClick={() => setShowNew(v => !v)}
               style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "0.72rem", fontFamily: "'DM Sans',sans-serif" }}>
@@ -1681,6 +1891,19 @@ function ForceChangePasswordScreen({ currentUser, onSave }) {
           {tooShort && <span style={{ fontSize: "0.72rem", color: "#FCA5A5" }}>Must be at least 8 characters.</span>}
         </div>
 
+        {/* Strength bar */}
+        {newPw.length > 0 && (
+          <div style={{ width: "100%" }}>
+            <div style={{ display: "flex", gap: "4px", marginBottom: "4px" }}>
+              {[1,2,3,4].map(i => (
+                <div key={i} style={{ flex: 1, height: "3px", borderRadius: "2px", background: i <= pwScore ? pwColor : "#1A1A1A", transition: "background 0.2s" }} />
+              ))}
+            </div>
+            <div style={{ fontSize: "0.68rem", color: "#555" }}>{pwLabel}</div>
+          </div>
+        )}
+
+        {/* Confirm password */}
         <div style={{ ...S.formRow, width: "100%" }}>
           <label style={S.formLabel}>Confirm Password</label>
           <div style={{ position: "relative" }}>
@@ -1690,7 +1913,7 @@ function ForceChangePasswordScreen({ currentUser, onSave }) {
               value={confirmPw}
               onChange={e => setConfirmPw(e.target.value)}
               placeholder="Re-enter your password"
-              onKeyDown={e => e.key === "Enter" && valid && onSave(newPw)}
+              onKeyDown={e => e.key === "Enter" && valid && onSave(newPw, email)}
             />
             <button onClick={() => setShowConfirm(v => !v)}
               style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#555", cursor: "pointer", fontSize: "0.72rem", fontFamily: "'DM Sans',sans-serif" }}>
@@ -1700,27 +1923,11 @@ function ForceChangePasswordScreen({ currentUser, onSave }) {
           {mismatch && <span style={{ fontSize: "0.72rem", color: "#FCA5A5" }}>Passwords don't match.</span>}
         </div>
 
-        {/* Strength indicator */}
-        {newPw.length > 0 && (
-          <div style={{ width: "100%" }}>
-            <div style={{ display: "flex", gap: "4px", marginBottom: "4px" }}>
-              {[1,2,3,4].map(i => {
-                const score = Math.min(4, Math.floor(newPw.length / 3));
-                const color = score <= 1 ? "#DC2626" : score === 2 ? "#F59E0B" : score === 3 ? "#059669" : "#059669";
-                return <div key={i} style={{ flex: 1, height: "3px", borderRadius: "2px", background: i <= score ? color : "#1A1A1A", transition: "background 0.2s" }} />;
-              })}
-            </div>
-            <div style={{ fontSize: "0.68rem", color: "#555" }}>
-              {newPw.length < 8 ? "Too short" : newPw.length < 12 ? "Fair" : newPw.length < 16 ? "Good" : "Strong"}
-            </div>
-          </div>
-        )}
-
         <button
           style={{ ...S.saveBtn, width: "100%", padding: "12px", opacity: valid ? 1 : 0.4 }}
           disabled={!valid}
-          onClick={() => onSave(newPw)}>
-          Set Password & Continue
+          onClick={() => onSave(newPw, email)}>
+          Set Up Account & Continue →
         </button>
       </div>
     </div>
@@ -1730,18 +1937,20 @@ function ForceChangePasswordScreen({ currentUser, onSave }) {
 // ─── CHANGE PASSWORD MODAL ────────────────────────────────────────────────────
 
 function ChangePasswordModal({ currentUser, onSave, onClose }) {
-  const [currentPw, setCurrentPw] = useState("");
-  const [newPw, setNewPw]         = useState("");
-  const [confirmPw, setConfirmPw] = useState("");
+  const [email, setEmail]           = useState(currentUser.email || "");
+  const [currentPw, setCurrentPw]   = useState("");
+  const [newPw, setNewPw]           = useState("");
+  const [confirmPw, setConfirmPw]   = useState("");
   const [showCurrent, setShowCurrent]   = useState(false);
   const [showNew, setShowNew]           = useState(false);
   const [showConfirm, setShowConfirm]   = useState(false);
   const [currentError, setCurrentError] = useState("");
 
-  const tooShort = newPw.length > 0 && newPw.length < 8;
-  const mismatch = confirmPw.length > 0 && newPw !== confirmPw;
+  const emailInvalid = email.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  const tooShort  = newPw.length > 0 && newPw.length < 8;
+  const mismatch  = confirmPw.length > 0 && newPw !== confirmPw;
   const sameAsOld = newPw.length > 0 && newPw === currentUser.password;
-  const valid = currentPw.length > 0 && newPw.length >= 8 && newPw === confirmPw && !sameAsOld;
+  const valid = email.length > 0 && !emailInvalid && currentPw.length > 0 && newPw.length >= 8 && newPw === confirmPw && !sameAsOld;
 
   const handleSave = () => {
     if (currentPw !== currentUser.password) {
@@ -1749,7 +1958,7 @@ function ChangePasswordModal({ currentUser, onSave, onClose }) {
       return;
     }
     setCurrentError("");
-    onSave(newPw);
+    onSave(newPw, email);
   };
 
   const pwStrengthScore = Math.min(4, Math.floor(newPw.length / 3));
@@ -1779,10 +1988,24 @@ function ChangePasswordModal({ currentUser, onSave, onClose }) {
     <div style={S.modalOverlay} onClick={onClose}>
       <div style={{ ...S.modal, maxWidth: "420px" }} onClick={e => e.stopPropagation()}>
         <div style={S.modalHeader}>
-          <h3 style={S.modalTitle}>🔑 Change Password</h3>
+          <h3 style={S.modalTitle}>🔑 Account Settings</h3>
           <button style={S.modalClose} onClick={onClose}>✕</button>
         </div>
         <div style={S.modalBody}>
+          {/* Email */}
+          <div style={S.formRow}>
+            <label style={S.formLabel}>Email Address</label>
+            <input type="email"
+              style={{ ...S.formInput, borderColor: emailInvalid ? "#DC2626" : undefined }}
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+            />
+            {emailInvalid && <span style={{ fontSize: "0.72rem", color: "#FCA5A5" }}>Please enter a valid email address.</span>}
+          </div>
+
+          <div style={{ height: "1px", background: "#1A1A1A" }} />
+
           <PwField label="Current Password" value={currentPw} onChange={v => { setCurrentPw(v); setCurrentError(""); }}
             show={showCurrent} onToggle={() => setShowCurrent(v => !v)}
             error={currentError} placeholder="Your current password" />
@@ -1814,7 +2037,7 @@ function ChangePasswordModal({ currentUser, onSave, onClose }) {
         <div style={S.modalFooter}>
           <button style={S.cancelBtn} onClick={onClose}>Cancel</button>
           <button style={{ ...S.saveBtn, opacity: valid ? 1 : 0.4 }} disabled={!valid} onClick={handleSave}>
-            Update Password
+            Save Changes
           </button>
         </div>
       </div>
