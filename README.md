@@ -4,51 +4,54 @@ A restaurant staff scheduling app built with React + Vite.
 
 ---
 
-## Local Development
+## Deploying Updates from Claude
+
+When Claude gives you an updated `restaurant-scheduler.jsx`:
+
+1. Replace `tableside/src/App.jsx` with the new file
+2. Run the deploy script for your operating system:
+
+**Mac / Linux:** double-click `deploy.sh`
+*(first time: right-click → Open, or run `chmod +x deploy.sh` in terminal first)*
+
+**Windows:** double-click `deploy.bat`
+
+The script will:
+- Ask for an optional commit message
+- Stage, commit, and push to GitHub
+- Trigger an automatic Netlify redeploy (~60 seconds)
+
+---
+
+## First-Time Setup
 
 ### 1. Install dependencies
 ```bash
 npm install
 ```
 
-### 2. Start the dev server
+### 2. Run locally
 ```bash
 npm run dev
 ```
+Open [http://localhost:5173](http://localhost:5173)
 
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+### 3. Initialize git & push to GitHub
+```bash
+git init
+git add .
+git commit -m "Initial commit"
+git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git
+git branch -M main
+git push -u origin main
+```
 
----
-
-## Deploy to Netlify (Quickest)
-
-### Option A — Drag & Drop (no account needed)
-1. Build the project:
-   ```bash
-   npm run build
-   ```
-2. Go to [app.netlify.com/drop](https://app.netlify.com/drop)
-3. Drag the `dist/` folder onto the page
-4. You'll get a live URL immediately ✅
-
-### Option B — Netlify + GitHub (auto-deploys on every push)
-1. Push this project to a GitHub repo
-2. Go to [netlify.com](https://netlify.com) → **Add new site** → **Import from Git**
-3. Connect your GitHub repo
-4. Set build settings:
-   - **Build command:** `npm run build`
-   - **Publish directory:** `dist`
-5. Click **Deploy** ✅
-
-Every `git push` will automatically redeploy.
-
----
-
-## Deploy to Vercel
-1. Push this project to a GitHub repo
-2. Go to [vercel.com](https://vercel.com) → **Add New Project**
-3. Import your GitHub repo — Vercel auto-detects Vite, no config needed
-4. Click **Deploy** ✅
+### 4. Connect to Netlify
+1. Go to [netlify.com](https://netlify.com) → **Add new site → Import from Git**
+2. Select your GitHub repo
+3. Build command: `npm run build`
+4. Publish directory: `dist`
+5. Click **Deploy**
 
 ---
 
@@ -57,14 +60,15 @@ Every `git push` will automatically redeploy.
 ```
 tableside/
 ├── public/
-│   └── favicon.svg         # App icon
+│   └── favicon.svg
 ├── src/
-│   ├── main.jsx            # React entry point
-│   └── App.jsx             # Main app (all components)
-├── index.html              # HTML shell
-├── vite.config.js          # Vite config
-├── package.json            # Dependencies & scripts
-└── .gitignore
+│   ├── main.jsx          # React entry point
+│   └── App.jsx           # Main app (replace this with Claude's updates)
+├── deploy.sh             # One-click deploy (Mac/Linux)
+├── deploy.bat            # One-click deploy (Windows)
+├── index.html
+├── vite.config.js
+└── package.json
 ```
 
 ---
@@ -72,5 +76,5 @@ tableside/
 ## Tech Stack
 - [React 18](https://react.dev)
 - [Vite 5](https://vitejs.dev)
-- [Recharts](https://recharts.org) — labor cost charts
-- [DM Sans + DM Serif Display](https://fonts.google.com) — typography (loaded from Google Fonts)
+- [Recharts](https://recharts.org)
+- [DM Sans + DM Serif Display](https://fonts.google.com)
