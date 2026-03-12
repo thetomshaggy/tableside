@@ -24,7 +24,7 @@ const INITIAL_POSITIONS = [
 ];
 
 // Default weekly revenue budget target and labor cost % goal
-const DEFAULT_BUDGET = { weeklyRevenue: 35000, laborPctGoal: 28 };
+const DEFAULT_BUDGET = { weeklyRevenue: 35000, laborPctGoal: 28, dailySalary: 0 };
 
 const DAYS      = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const FULL_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
@@ -54,8 +54,11 @@ const weekDates = (weekStart) =>
   });
 
 const INITIAL_STAFF = [
-  { id: 1,  name: "Jordan Lee",    role: "manager",  password: "manager1",      positions: ["Bartender","Server"],   availability: DEFAULT_AVAILABILITY },
-  { id: 2,  name: "Maria Santos",  role: "manager",  password: "manager2",      positions: ["Server","Host"],         availability: DEFAULT_AVAILABILITY },
+  { id: 1,  name: "Jordan Lee",      role: "manager",  password: "manager1",        positions: ["Bartender","Server"],   availability: DEFAULT_AVAILABILITY },
+  { id: 2,  name: "Maria Santos",    role: "manager",  password: "manager2",        positions: ["Server","Host"],         availability: DEFAULT_AVAILABILITY },
+  { id: 101, name: "Brandon Fisher",  role: "manager",  password: "CrispBasil128",   positions: [],                        availability: DEFAULT_AVAILABILITY },
+  { id: 102, name: "Brandee Kaneao",  role: "manager",  password: "SwiftBasil160",   positions: [],                        availability: DEFAULT_AVAILABILITY },
+  { id: 103, name: "Tom Shaggy",      role: "manager",  password: "TSh4ggy_7",        positions: [],                        availability: DEFAULT_AVAILABILITY },
   { id: 3,  name: "Alex Kim",      role: "employee", password: "SwiftTable42",  positions: ["Bartender"],             availability: { 0:"preferred",1:"available",2:"preferred",3:"unavailable",4:"available",5:"preferred",6:"preferred" } },
   { id: 4,  name: "Sam Rivera",    role: "employee", password: "BoldPlate17",   positions: ["Server","Food Runner"],  availability: { 0:"available",1:"preferred",2:"available",3:"preferred",4:"unavailable",5:"available",6:"available" } },
   { id: 5,  name: "Casey Brown",   role: "employee", password: "CrispFlame83",  positions: ["Busser","Food Runner"],  availability: { 0:"available",1:"unavailable",2:"available",3:"available",4:"preferred",5:"preferred",6:"available" } },
@@ -195,7 +198,7 @@ td{padding:5px 8px;border:1px solid #eee;vertical-align:top}tr:nth-child(even) t
 
 // ─── LABOR COST CALCULATIONS ─────────────────────────────────────────────────
 
-function calcLaborCosts(shifts, staff, wages, POSITIONS) {
+function calcLaborCosts(shifts, staff, wages, POSITIONS, dailySalary = 0) {
   // Group by date, sorted
   const allDates = [...new Set(shifts.map(s => s.date))].sort();
   const byDay = allDates.map(date => {
@@ -224,7 +227,11 @@ function calcLaborCosts(shifts, staff, wages, POSITIONS) {
   const totalCost = shifts.reduce((acc, s) => acc + shiftHours(s) * (wages[s.position] || 0), 0);
   const totalHours = shifts.reduce((acc, s) => acc + shiftHours(s), 0);
 
-  return { byDay, byPosition, byEmployee, totalCost, totalHours };
+  // Salaried staff (managers)
+  const totalSalaryCost = (parseFloat(dailySalary) || 0) * 7;
+  const totalLaborCost = totalCost + totalSalaryCost;
+
+  return { byDay, byPosition, byEmployee, totalCost, totalHours, totalSalaryCost, totalLaborCost };
 }
 
 // ─── MAIN APP ────────────────────────────────────────────────────────────────
@@ -297,7 +304,6 @@ export default function App() {
   };
   const handleEditStaff = (member) => {
     setStaff(s => s.map(x => x.id === member.id ? member : x));
-    // If the logged-in manager edited their own record, update currentUser too
     if (member.id === currentUser.id) setCurrentUser(member);
   };
   const handleRemoveStaff = (id) => {
@@ -426,7 +432,7 @@ export default function App() {
         {view === "staff" && isManager && (
           <StaffManagementView
             staff={staff} positions={positions} POSITION_COLORS={POSITION_COLORS}
-            COLOR_POOL={COLOR_POOL}
+            COLOR_POOL={COLOR_POOL} currentUser={currentUser}
             onAddStaff={handleAddStaff}
             onEditStaff={handleEditStaff}
             onRemoveStaff={handleRemoveStaff}
@@ -469,22 +475,73 @@ export default function App() {
 // ─── LABOR COST VIEW ─────────────────────────────────────────────────────────
 
 function LaborCostView({ shifts, staff, positions, setPositions, POSITIONS, POSITION_COLORS, wages, budget, setBudget, weekLabel }) {
-  const [activeTab, setActiveTab] = useState("overview");
-
-  const labor = useMemo(() => calcLaborCosts(shifts, staff, wages, POSITIONS), [shifts, staff, wages, POSITIONS]);
-  const laborPct = budget.weeklyRevenue > 0 ? (labor.totalCost / budget.weeklyRevenue) * 100 : 0;
-  const laborGoalCost = (budget.weeklyRevenue * budget.laborPctGoal) / 100;
-  const overBudget = labor.totalCost > laborGoalCost;
-  const variance = labor.totalCost - laborGoalCost;
-
-  const PIE_COLORS = POSITIONS.map(p => POSITION_COLORS[p]?.dot || "#888");
-
+  const [activeTab, setActiveTab] = useState("byDay");
   const [editingBudget, setEditingBudget] = useState(false);
   const [draftBudget, setDraftBudget] = useState(budget);
 
+  // actuals: { daily: { [date]: { revenue, laborCost } }, weekly: { revenue, laborCost } }
+  const [actuals, setActuals] = useState({ daily: {}, weekly: {} });
+
+  const labor = useMemo(() => calcLaborCosts(shifts, staff, wages, POSITIONS, budget.dailySalary || 0), [shifts, staff, wages, POSITIONS, budget.dailySalary]);
+  const laborGoalCost = (budget.weeklyRevenue * budget.laborPctGoal) / 100;
+  const overBudget = labor.totalLaborCost > laborGoalCost;
+
+  // Weekly actuals
+  const weekActualRev   = actuals.weekly.revenue   ?? "";
+  const weekActualLabor = actuals.weekly.laborCost  ?? "";
+  const weekActualRevNum   = parseFloat(weekActualRev)   || 0;
+  const weekActualLaborNum = parseFloat(weekActualLabor) || 0;
+  const weekActualLaborPct = weekActualRevNum > 0 ? (weekActualLaborNum / weekActualRevNum) * 100 : null;
+  const weekVariance = weekActualRevNum > 0 || weekActualLaborNum > 0
+    ? weekActualLaborNum - labor.totalLaborCost : null;
+
+  const PIE_COLORS = POSITIONS.map(p => POSITION_COLORS[p]?.dot || "#888");
+
+  const setDailyActual = (date, field, val) =>
+    setActuals(a => ({ ...a, daily: { ...a.daily, [date]: { ...(a.daily[date] || {}), [field]: val } } }));
+  const setWeeklyActual = (field, val) =>
+    setActuals(a => ({ ...a, weekly: { ...a.weekly, [field]: val } }));
+
+  // Enrich byDay with actuals
+  const byDayEnriched = labor.byDay.map(row => {
+    const d = actuals.daily[row.date] || {};
+    const actualRev   = parseFloat(d.revenue)   || null;
+    const actualLabor = parseFloat(d.laborCost)  || null;
+    const actualLaborPct = actualRev > 0 && actualLabor != null ? (actualLabor / actualRev) * 100 : null;
+    const variance = actualLabor != null ? actualLabor - row.cost : null;
+    return { ...row, actualRev, actualLabor, actualLaborPct, variance };
+  });
+
+  // Chart data for by-day
+  const byDayChartData = byDayEnriched.map(r => ({
+    day: r.day,
+    projected: r.cost,
+    actual: r.actualLabor ?? undefined,
+  }));
+
+  // Chart data for by-week (projected vs actual for each day's revenue)
+  const byWeekChartData = byDayEnriched.map(r => ({
+    day: r.day,
+    projRevenue: budget.weeklyRevenue > 0 ? budget.weeklyRevenue / 7 : 0,
+    actualRevenue: r.actualRev ?? undefined,
+  }));
+
+  const NumInput = ({ value, onChange, prefix = "$", placeholder }) => (
+    <div style={{ position: "relative", width: "110px" }}>
+      <span style={{ position: "absolute", left: "8px", top: "50%", transform: "translateY(-50%)", color: "#444", fontSize: "0.75rem" }}>{prefix}</span>
+      <input
+        type="number" min="0" step="100"
+        style={{ ...S.formInput, paddingLeft: "18px", paddingRight: "6px", fontSize: "0.78rem", height: "30px", width: "100%" }}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+      />
+    </div>
+  );
+
   return (
     <div style={S.viewWrap}>
-      {/* Page header */}
+      {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
         <div>
           <h2 style={{ fontFamily: "'DM Serif Display',serif", fontSize: "1.6rem" }}>Labor Cost Analysis</h2>
@@ -498,134 +555,308 @@ function LaborCostView({ shifts, staff, positions, setPositions, POSITIONS, POSI
 
       {/* KPI Cards */}
       <div style={LC.kpiRow}>
-        <KpiCard label="Total Labor Cost" value={fmtMoney(labor.totalCost)} sub={`${labor.totalHours.toFixed(1)} total hours`} accent="#F59E0B" icon="💵" />
-        <KpiCard label="Labor Cost %" value={`${laborPct.toFixed(1)}%`}
-          sub={`Goal: ${budget.laborPctGoal}%`}
-          accent={overBudget ? "#DC2626" : "#059669"}
-          icon={overBudget ? "⚠" : "✓"}
-          highlight={overBudget ? "#DC262618" : "#05966918"} />
-        <KpiCard label="Budget Target" value={fmtMoney(laborGoalCost)}
-          sub={`of ${fmtMoney(budget.weeklyRevenue)} revenue`}
+        <KpiCard label="Hourly Labor" value={fmtMoney(labor.totalCost)} sub={`${labor.totalHours.toFixed(1)} hrs scheduled`} accent="#F59E0B" icon="⏱" />
+        <KpiCard label="Salary Overhead" value={fmtMoney(labor.totalSalaryCost)}
+          sub={`${fmtMoney(budget.dailySalary || 0)}/day × 7`}
+          accent="#7C3AED" icon="💼" />
+        <KpiCard label="Total Labor (Proj)" value={fmtMoney(labor.totalLaborCost)} sub={`Hourly + salary`} accent="#F59E0B" icon="📋" />
+        <KpiCard label="Actual Labor" value={weekActualLaborNum > 0 ? fmtMoney(weekActualLaborNum) : "—"}
+          sub={weekActualLaborPct != null ? `${weekActualLaborPct.toFixed(1)}% of actual revenue` : "Enter actuals below"}
+          accent={weekActualLaborNum > labor.totalLaborCost ? "#DC2626" : weekActualLaborNum > 0 ? "#059669" : "#555"}
+          icon="💵" />
+        <KpiCard label="Labor Goal"
+          value={fmtMoney(laborGoalCost)}
+          sub={`${budget.laborPctGoal}% of ${fmtMoney(budget.weeklyRevenue)}`}
           accent="#7C3AED" icon="🎯" />
-        <KpiCard label="Variance"
-          value={(overBudget ? "+" : "") + fmtMoney(variance)}
-          sub={overBudget ? "over budget" : "under budget"}
-          accent={overBudget ? "#DC2626" : "#059669"}
-          icon={overBudget ? "📈" : "📉"}
-          highlight={overBudget ? "#DC262612" : "#05966912"} />
+        <KpiCard label="Variance (Actual vs Proj)"
+          value={weekVariance != null ? (weekVariance >= 0 ? "+" : "") + fmtMoney(weekVariance) : "—"}
+          sub={weekVariance != null ? (weekVariance > 0 ? "over projected" : "under projected") : "No actuals yet"}
+          accent={weekVariance == null ? "#555" : weekVariance > 0 ? "#DC2626" : "#059669"}
+          icon={weekVariance == null ? "📊" : weekVariance > 0 ? "📈" : "📉"}
+          highlight={weekVariance == null ? undefined : weekVariance > 0 ? "#DC262612" : "#05966912"} />
       </div>
 
-      {/* Budget progress bar */}
+      {/* Projected vs Goal bar */}
       <div style={LC.progressWrap}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
-          <span style={{ fontSize: "0.78rem", color: "#666" }}>Labor spend vs. goal</span>
+          <span style={{ fontSize: "0.78rem", color: "#666" }}>Projected total labor vs. goal</span>
           <span style={{ fontSize: "0.78rem", fontWeight: "600", color: overBudget ? "#FCA5A5" : "#6EE7B7" }}>
-            {fmtMoney(labor.totalCost)} / {fmtMoney(laborGoalCost)}
+            {fmtMoney(labor.totalLaborCost)} / {fmtMoney(laborGoalCost)}
           </span>
         </div>
         <div style={LC.progressTrack}>
-          <div style={{ ...LC.progressFill, width: `${Math.min((labor.totalCost / laborGoalCost) * 100, 100)}%`, background: overBudget ? "#DC2626" : "#059669" }} />
-          <div style={{ ...LC.progressGoalLine, left: "100%" }} title="Budget goal" />
+          <div style={{ ...LC.progressFill, width: `${Math.min((labor.totalLaborCost / (laborGoalCost || 1)) * 100, 100)}%`, background: overBudget ? "#DC2626" : "#059669" }} />
         </div>
-        <div style={{ display: "flex", justifyContent: "space-between", marginTop: "5px" }}>
-          <span style={{ fontSize: "0.7rem", color: "#444" }}>$0</span>
-          <span style={{ fontSize: "0.7rem", color: "#444" }}>Goal: {fmtMoney(laborGoalCost)}</span>
-        </div>
+        {weekActualLaborNum > 0 && (
+          <>
+            <div style={{ display: "flex", justifyContent: "space-between", margin: "8px 0 4px" }}>
+              <span style={{ fontSize: "0.78rem", color: "#666" }}>Actual labor vs. goal</span>
+              <span style={{ fontSize: "0.78rem", fontWeight: "600", color: weekActualLaborNum > laborGoalCost ? "#FCA5A5" : "#6EE7B7" }}>
+                {fmtMoney(weekActualLaborNum)} / {fmtMoney(laborGoalCost)}
+              </span>
+            </div>
+            <div style={LC.progressTrack}>
+              <div style={{ ...LC.progressFill, width: `${Math.min((weekActualLaborNum / (laborGoalCost || 1)) * 100, 100)}%`, background: weekActualLaborNum > laborGoalCost ? "#F59E0B" : "#7C3AED" }} />
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Tab bar */}
-      <div style={{ display: "flex", gap: "4px", marginBottom: "20px", borderBottom: "1px solid #1A1A1A", paddingBottom: "0" }}>
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: "4px", marginBottom: "20px", borderBottom: "1px solid #1A1A1A" }}>
         {[
-          { key: "overview",  label: "📅 By Day" },
+          { key: "byDay",     label: "📅 By Day" },
+          { key: "byWeek",    label: "📆 By Week" },
           { key: "position",  label: "🎭 By Position" },
           { key: "employee",  label: "👥 By Employee" },
         ].map(t => (
-          <button key={t.key}
-            style={{ ...LC.tab, ...(activeTab === t.key ? LC.tabActive : {}) }}
-            onClick={() => setActiveTab(t.key)}>
+          <button key={t.key} style={{ ...LC.tab, ...(activeTab === t.key ? LC.tabActive : {}) }} onClick={() => setActiveTab(t.key)}>
             {t.label}
           </button>
         ))}
       </div>
 
       {/* ── BY DAY ── */}
-      {activeTab === "overview" && (
+      {activeTab === "byDay" && (
         <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          {/* Chart: projected vs actual labor */}
           <div style={LC.chartCard}>
-            <div style={LC.chartTitle}>Daily Labor Cost</div>
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={labor.byDay} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+              <div style={LC.chartTitle}>Daily Labor Cost — Projected vs. Actual</div>
+              <div style={{ display: "flex", gap: "14px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}><span style={{ width: "10px", height: "10px", borderRadius: "2px", background: "#F59E0B", flexShrink: 0 }} /><span style={{ fontSize: "0.72rem", color: "#666" }}>Projected</span></div>
+                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}><span style={{ width: "10px", height: "10px", borderRadius: "2px", background: "#7C3AED", flexShrink: 0 }} /><span style={{ fontSize: "0.72rem", color: "#666" }}>Actual</span></div>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={byDayChartData} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" />
-                <XAxis dataKey="day" tick={{ fill: "#666", fontSize: 12 }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="day" tick={{ fill: "#666", fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={fmtMoneyK} tick={{ fill: "#666", fontSize: 11 }} axisLine={false} tickLine={false} width={50} />
-                <Tooltip
-                  contentStyle={{ background: "#111", border: "1px solid #2A2A2A", borderRadius: "8px", fontSize: "0.8rem" }}
+                <Tooltip contentStyle={{ background: "#111", border: "1px solid #2A2A2A", borderRadius: "8px", fontSize: "0.8rem" }}
                   labelStyle={{ color: "#F5F0E8", fontWeight: 600 }}
-                  formatter={(v, n) => [fmtMoney(v), "Labor Cost"]}
-                />
-                <Bar dataKey="cost" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+                  formatter={(v, n) => [fmtMoney(v), n === "projected" ? "Projected" : "Actual"]} />
+                <Legend formatter={v => <span style={{ color: "#888", fontSize: "0.75rem", textTransform: "capitalize" }}>{v}</span>} />
+                <Bar dataKey="projected" fill="#F59E0B" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="actual"    fill="#7C3AED" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
 
-          <div style={LC.chartCard}>
-            <div style={LC.chartTitle}>Daily Hours Worked</div>
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={labor.byDay} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" />
-                <XAxis dataKey="day" tick={{ fill: "#666", fontSize: 12 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: "#666", fontSize: 11 }} axisLine={false} tickLine={false} width={35} />
-                <Tooltip
-                  contentStyle={{ background: "#111", border: "1px solid #2A2A2A", borderRadius: "8px", fontSize: "0.8rem" }}
-                  labelStyle={{ color: "#F5F0E8", fontWeight: 600 }}
-                  formatter={(v) => [`${v.toFixed(1)} hrs`, "Hours"]}
-                />
-                <Bar dataKey="hours" fill="#7C3AED" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Day breakdown table */}
+          {/* Table with inline actual entry */}
           <div style={LC.tableCard}>
+            <div style={{ padding: "12px 16px 8px", fontSize: "0.72rem", color: "#444", borderBottom: "1px solid #111" }}>
+              Enter actual revenue and labor cost per day to compare against projections.
+            </div>
             <table style={LC.table}>
               <thead>
                 <tr>
-                  {["Day", "Shifts", "Hours", "Labor Cost", "Avg $/hr", "% of Week"].map(h => (
+                  {["Date", "Proj. Labor", "Proj. Hrs", "Actual Revenue", "Actual Labor", "Variance", "Actual Labor %"].map(h => (
                     <th key={h} style={LC.th}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {labor.byDay.map((row, i) => (
-                  <tr key={i} style={i % 2 === 0 ? {} : { background: "#0A0A0A" }}>
-                    <td style={LC.td}><strong style={{ color: "#F5F0E8" }}>{FULL_DAYS[i]}</strong></td>
-                    <td style={LC.tdNum}>{row.shifts}</td>
-                    <td style={LC.tdNum}>{row.hours.toFixed(1)}</td>
-                    <td style={LC.tdNum}><strong style={{ color: "#F59E0B" }}>{fmtMoney(row.cost)}</strong></td>
-                    <td style={LC.tdNum}>{row.hours > 0 ? fmtMoney(row.cost / row.hours) : "—"}</td>
-                    <td style={{ ...LC.tdNum }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <div style={{ flex: 1, height: "4px", background: "#1A1A1A", borderRadius: "2px", overflow: "hidden" }}>
-                          <div style={{ width: `${labor.totalCost > 0 ? (row.cost / labor.totalCost) * 100 : 0}%`, height: "100%", background: "#F59E0B", borderRadius: "2px" }} />
-                        </div>
-                        <span style={{ fontSize: "0.75rem", color: "#888", minWidth: "32px" }}>
-                          {labor.totalCost > 0 ? ((row.cost / labor.totalCost) * 100).toFixed(0) : 0}%
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {byDayEnriched.map((row, i) => {
+                  const dailyActual = actuals.daily[row.date] || {};
+                  const varColor = row.variance == null ? "#888" : row.variance > 0 ? "#FCA5A5" : "#6EE7B7";
+                  return (
+                    <tr key={row.date} style={i % 2 === 0 ? {} : { background: "#0A0A0A" }}>
+                      <td style={LC.td}><strong style={{ color: "#F5F0E8" }}>{row.day}</strong></td>
+                      <td style={LC.tdNum}><strong style={{ color: "#F59E0B" }}>{fmtMoney(row.cost)}</strong></td>
+                      <td style={LC.tdNum}>{row.hours.toFixed(1)}</td>
+                      <td style={{ ...LC.tdNum, padding: "6px 10px" }}>
+                        <NumInput value={dailyActual.revenue ?? ""} onChange={v => setDailyActual(row.date, "revenue", v)} placeholder="0" />
+                      </td>
+                      <td style={{ ...LC.tdNum, padding: "6px 10px" }}>
+                        <NumInput value={dailyActual.laborCost ?? ""} onChange={v => setDailyActual(row.date, "laborCost", v)} placeholder="0" />
+                      </td>
+                      <td style={LC.tdNum}>
+                        {row.variance != null
+                          ? <span style={{ color: varColor, fontWeight: "600" }}>{row.variance >= 0 ? "+" : ""}{fmtMoney(row.variance)}</span>
+                          : <span style={{ color: "#2A2A2A" }}>—</span>}
+                      </td>
+                      <td style={LC.tdNum}>
+                        {row.actualLaborPct != null
+                          ? <span style={{ color: row.actualLaborPct > budget.laborPctGoal ? "#FCA5A5" : "#6EE7B7" }}>{row.actualLaborPct.toFixed(1)}%</span>
+                          : <span style={{ color: "#2A2A2A" }}>—</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr style={{ borderTop: "1px solid #2A2A2A" }}>
-                  <td style={{ ...LC.td, color: "#888", fontSize: "0.75rem" }}><strong>TOTAL</strong></td>
-                  <td style={LC.tdNum}><strong>{shifts.length}</strong></td>
-                  <td style={LC.tdNum}><strong>{labor.totalHours.toFixed(1)}</strong></td>
+                  <td style={{ ...LC.td, color: "#888", fontSize: "0.75rem" }}><strong>HOURLY SUBTOTAL</strong></td>
                   <td style={LC.tdNum}><strong style={{ color: "#F59E0B" }}>{fmtMoney(labor.totalCost)}</strong></td>
-                  <td style={LC.tdNum}>{labor.totalHours > 0 ? fmtMoney(labor.totalCost / labor.totalHours) : "—"}</td>
-                  <td style={LC.tdNum}>100%</td>
+                  <td style={LC.tdNum}><strong>{labor.totalHours.toFixed(1)}</strong></td>
+                  <td style={LC.tdNum}>{Object.values(actuals.daily).some(d => d.revenue) ? fmtMoney(Object.values(actuals.daily).reduce((s, d) => s + (parseFloat(d.revenue) || 0), 0)) : "—"}</td>
+                  <td style={LC.tdNum}>{weekActualLaborNum > 0 ? <strong style={{ color: "#7C3AED" }}>{fmtMoney(weekActualLaborNum)}</strong> : "—"}</td>
+                  <td style={LC.tdNum}>{weekVariance != null ? <span style={{ color: weekVariance > 0 ? "#FCA5A5" : "#6EE7B7", fontWeight: "600" }}>{weekVariance >= 0 ? "+" : ""}{fmtMoney(weekVariance)}</span> : "—"}</td>
+                  <td style={LC.tdNum}>{weekActualLaborPct != null ? `${weekActualLaborPct.toFixed(1)}%` : "—"}</td>
+                </tr>
+                {labor.totalSalaryCost > 0 && (
+                  <tr style={{ background: "#7C3AED11" }}>
+                    <td style={{ ...LC.td, color: "#C4B5FD", fontSize: "0.75rem" }}><strong>💼 SALARY OVERHEAD</strong></td>
+                    <td style={LC.tdNum}><strong style={{ color: "#C4B5FD" }}>{fmtMoney(labor.totalSalaryCost)}</strong></td>
+                    <td style={LC.tdNum} colSpan={5}><span style={{ color: "#555", fontSize: "0.72rem" }}>Weekly salary — distributed across all days</span></td>
+                  </tr>
+                )}
+                <tr style={{ borderTop: "1px solid #2A2A2A", background: "#141414" }}>
+                  <td style={{ ...LC.td, color: "#F5F0E8", fontSize: "0.75rem" }}><strong>TOTAL LABOR</strong></td>
+                  <td style={LC.tdNum}><strong style={{ color: "#F59E0B" }}>{fmtMoney(labor.totalLaborCost)}</strong></td>
+                  <td style={LC.tdNum} colSpan={5} />
                 </tr>
               </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── BY WEEK ── */}
+      {activeTab === "byWeek" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          {/* Weekly summary inputs */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+            {/* Projected */}
+            <div style={{ ...LC.chartCard, display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={LC.chartTitle}>📋 Projected (from schedule)</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {[
+                  { label: "Revenue Target", value: fmtMoney(budget.weeklyRevenue), accent: "#F59E0B" },
+                  { label: "Hourly Labor", value: fmtMoney(labor.totalCost), accent: "#F59E0B" },
+                  { label: "Salary Overhead", value: fmtMoney(labor.totalSalaryCost), accent: "#C4B5FD" },
+                  { label: "Total Labor", value: fmtMoney(labor.totalLaborCost), accent: "#F59E0B" },
+                  { label: "Labor %", value: budget.weeklyRevenue > 0 ? `${((labor.totalLaborCost / budget.weeklyRevenue) * 100).toFixed(1)}%` : "—", accent: overBudget ? "#FCA5A5" : "#6EE7B7" },
+                  { label: "Labor Goal", value: fmtMoney(laborGoalCost), accent: "#7C3AED" },
+                  { label: "Total Hours", value: `${labor.totalHours.toFixed(1)} hrs`, accent: "#F5F0E8" },
+                ].map(({ label, value, accent }) => (
+                  <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 12px", background: "#141414", borderRadius: "6px" }}>
+                    <span style={{ fontSize: "0.8rem", color: "#666" }}>{label}</span>
+                    <span style={{ fontSize: "0.9rem", fontWeight: "600", color: accent }}>{value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Actuals entry */}
+            <div style={{ ...LC.chartCard, display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={LC.chartTitle}>✏️ Actual (enter below)</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <div style={S.formRow}>
+                  <label style={S.formLabel}>Actual Weekly Revenue</label>
+                  <div style={{ position: "relative" }}>
+                    <span style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#555" }}>$</span>
+                    <input type="number" min="0" step="100" placeholder="0.00"
+                      style={{ ...S.formInput, paddingLeft: "22px" }}
+                      value={weekActualRev}
+                      onChange={e => setWeeklyActual("revenue", e.target.value)} />
+                  </div>
+                </div>
+                <div style={S.formRow}>
+                  <label style={S.formLabel}>Actual Weekly Labor Cost</label>
+                  <div style={{ position: "relative" }}>
+                    <span style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#555" }}>$</span>
+                    <input type="number" min="0" step="100" placeholder="0.00"
+                      style={{ ...S.formInput, paddingLeft: "22px" }}
+                      value={weekActualLabor}
+                      onChange={e => setWeeklyActual("laborCost", e.target.value)} />
+                  </div>
+                </div>
+                {(weekActualRevNum > 0 || weekActualLaborNum > 0) && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "4px" }}>
+                    {weekActualRevNum > 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 12px", background: "#141414", borderRadius: "6px" }}>
+                        <span style={{ fontSize: "0.8rem", color: "#666" }}>Revenue vs. Target</span>
+                        <span style={{ fontSize: "0.85rem", fontWeight: "600", color: weekActualRevNum >= budget.weeklyRevenue ? "#6EE7B7" : "#FCA5A5" }}>
+                          {weekActualRevNum >= budget.weeklyRevenue ? "+" : ""}{fmtMoney(weekActualRevNum - budget.weeklyRevenue)}
+                        </span>
+                      </div>
+                    )}
+                    {weekActualLaborPct != null && (
+                      <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 12px", background: "#141414", borderRadius: "6px" }}>
+                        <span style={{ fontSize: "0.8rem", color: "#666" }}>Actual Labor %</span>
+                        <span style={{ fontSize: "0.85rem", fontWeight: "600", color: weekActualLaborPct > budget.laborPctGoal ? "#FCA5A5" : "#6EE7B7" }}>
+                          {weekActualLaborPct.toFixed(1)}% <span style={{ color: "#444", fontWeight: "400", fontSize: "0.75rem" }}>(goal: {budget.laborPctGoal}%)</span>
+                        </span>
+                      </div>
+                    )}
+                    {weekVariance != null && (
+                      <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 12px", background: "#141414", borderRadius: "6px" }}>
+                        <span style={{ fontSize: "0.8rem", color: "#666" }}>Labor Variance</span>
+                        <span style={{ fontSize: "0.85rem", fontWeight: "600", color: weekVariance > 0 ? "#FCA5A5" : "#6EE7B7" }}>
+                          {weekVariance >= 0 ? "+" : ""}{fmtMoney(weekVariance)} {weekVariance > 0 ? "over" : "under"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Revenue comparison chart */}
+          <div style={LC.chartCard}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+              <div style={LC.chartTitle}>Daily Revenue — Avg Projected vs. Actual</div>
+              <div style={{ display: "flex", gap: "14px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}><span style={{ width: "10px", height: "10px", borderRadius: "2px", background: "#F59E0B44", border: "1px solid #F59E0B", flexShrink: 0 }} /><span style={{ fontSize: "0.72rem", color: "#666" }}>Avg Projected</span></div>
+                <div style={{ display: "flex", alignItems: "center", gap: "5px" }}><span style={{ width: "10px", height: "10px", borderRadius: "2px", background: "#059669", flexShrink: 0 }} /><span style={{ fontSize: "0.72rem", color: "#666" }}>Actual</span></div>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={byWeekChartData} margin={{ top: 8, right: 16, left: 8, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" />
+                <XAxis dataKey="day" tick={{ fill: "#666", fontSize: 11 }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={fmtMoneyK} tick={{ fill: "#666", fontSize: 11 }} axisLine={false} tickLine={false} width={50} />
+                <Tooltip contentStyle={{ background: "#111", border: "1px solid #2A2A2A", borderRadius: "8px", fontSize: "0.8rem" }}
+                  labelStyle={{ color: "#F5F0E8", fontWeight: 600 }}
+                  formatter={(v, n) => [fmtMoney(v), n === "projRevenue" ? "Avg Projected" : "Actual"]} />
+                <Bar dataKey="projRevenue"   fill="#F59E0B44" stroke="#F59E0B" strokeWidth={1} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="actualRevenue" fill="#059669"   radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+            <div style={{ fontSize: "0.7rem", color: "#333", marginTop: "6px" }}>
+              Avg projected = weekly target ÷ 7. Enter daily actuals in the By Day tab for a day-level breakdown.
+            </div>
+          </div>
+
+          {/* Weekly comparison table */}
+          <div style={LC.tableCard}>
+            <table style={LC.table}>
+              <thead>
+                <tr>{["Metric", "Projected", "Actual", "Difference"].map(h => <th key={h} style={LC.th}>{h}</th>)}</tr>
+              </thead>
+              <tbody>
+                {[
+                  { label: "Revenue",         proj: budget.weeklyRevenue,   actual: weekActualRevNum || null, higherIsBetter: true },
+                  { label: "Hourly Labor",     proj: labor.totalCost,        actual: null, higherIsBetter: false },
+                  { label: "Salary Overhead",  proj: labor.totalSalaryCost,  actual: null, higherIsBetter: false },
+                  { label: "Total Labor",      proj: labor.totalLaborCost,   actual: weekActualLaborNum || null, higherIsBetter: false },
+                  { label: "Labor %",          proj: budget.weeklyRevenue > 0 ? labor.totalLaborCost / budget.weeklyRevenue * 100 : null,
+                                               actual: weekActualLaborPct, higherIsBetter: false, isPct: true },
+                  { label: "Labor Goal",       proj: laborGoalCost, actual: null, higherIsBetter: false },
+                  { label: "Total Hrs",        proj: labor.totalHours, actual: null, higherIsBetter: false, isHrs: true },
+                ].map(({ label, proj, actual, higherIsBetter, isPct, isHrs }, i) => {
+                  const diff = actual != null && proj != null ? actual - proj : null;
+                  const goodDiff = diff == null ? null : higherIsBetter ? diff >= 0 : diff <= 0;
+                  const fmtVal = (v) => v == null ? "—" : isPct ? `${v.toFixed(1)}%` : isHrs ? `${v.toFixed(1)} hrs` : fmtMoney(v);
+                  return (
+                    <tr key={label} style={i % 2 === 0 ? {} : { background: "#0A0A0A" }}>
+                      <td style={LC.td}><strong style={{ color: "#F5F0E8" }}>{label}</strong></td>
+                      <td style={LC.tdNum}><span style={{ color: "#F59E0B" }}>{fmtVal(proj)}</span></td>
+                      <td style={LC.tdNum}><span style={{ color: actual != null ? "#F5F0E8" : "#333" }}>{fmtVal(actual)}</span></td>
+                      <td style={LC.tdNum}>
+                        {diff != null
+                          ? <span style={{ color: goodDiff ? "#6EE7B7" : "#FCA5A5", fontWeight: "600" }}>
+                              {diff >= 0 ? "+" : ""}{fmtVal(diff)}
+                            </span>
+                          : <span style={{ color: "#2A2A2A" }}>—</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
             </table>
           </div>
         </div>
@@ -640,42 +871,32 @@ function LaborCostView({ shifts, staff, positions, setPositions, POSITIONS, POSI
               <ResponsiveContainer width="100%" height={260}>
                 <PieChart>
                   <Pie data={labor.byPosition.filter(p => p.cost > 0)} dataKey="cost" nameKey="position"
-                    cx="50%" cy="50%" outerRadius={100} innerRadius={50}
-                    paddingAngle={3}
+                    cx="50%" cy="50%" outerRadius={100} innerRadius={50} paddingAngle={3}
                     label={({ position, percent }) => percent > 0.05 ? `${(percent * 100).toFixed(0)}%` : ""}
                     labelLine={false}>
-                    {labor.byPosition.map((entry, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i]} />
-                    ))}
+                    {labor.byPosition.map((entry, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
                   </Pie>
-                  <Tooltip
-                    contentStyle={{ background: "#111", border: "1px solid #2A2A2A", borderRadius: "8px", fontSize: "0.8rem" }}
+                  <Tooltip contentStyle={{ background: "#111", border: "1px solid #2A2A2A", borderRadius: "8px", fontSize: "0.8rem" }}
                     formatter={(v) => [fmtMoney(v), "Cost"]} />
                   <Legend formatter={(v) => <span style={{ color: "#888", fontSize: "0.78rem" }}>{v}</span>} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-
             <div style={LC.chartCard}>
               <div style={LC.chartTitle}>Hours by Position</div>
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={labor.byPosition} layout="vertical" margin={{ top: 4, right: 24, left: 70, bottom: 4 }}>
                   <XAxis type="number" tick={{ fill: "#666", fontSize: 11 }} axisLine={false} tickLine={false} />
                   <YAxis type="category" dataKey="position" tick={{ fill: "#888", fontSize: 11 }} axisLine={false} tickLine={false} width={70} />
-                  <Tooltip
-                    contentStyle={{ background: "#111", border: "1px solid #2A2A2A", borderRadius: "8px", fontSize: "0.8rem" }}
+                  <Tooltip contentStyle={{ background: "#111", border: "1px solid #2A2A2A", borderRadius: "8px", fontSize: "0.8rem" }}
                     formatter={(v) => [`${v.toFixed(1)} hrs`, "Hours"]} />
-                  {labor.byPosition.map((entry, i) => null)}
                   <Bar dataKey="hours" radius={[0, 4, 4, 0]}>
-                    {labor.byPosition.map((entry, i) => (
-                      <Cell key={i} fill={PIE_COLORS[i]} />
-                    ))}
+                    {labor.byPosition.map((entry, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
-
           <div style={LC.tableCard}>
             <table style={LC.table}>
               <thead>
@@ -684,24 +905,17 @@ function LaborCostView({ shifts, staff, positions, setPositions, POSITIONS, POSI
               <tbody>
                 {labor.byPosition.map((row, i) => (
                   <tr key={i} style={i % 2 === 0 ? {} : { background: "#0A0A0A" }}>
-                    <td style={LC.td}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <span style={{ width: "10px", height: "10px", borderRadius: "50%", background: PIE_COLORS[i], flexShrink: 0 }} />
-                        <strong style={{ color: "#F5F0E8" }}>{row.position}</strong>
-                      </div>
-                    </td>
+                    <td style={LC.td}><div style={{ display: "flex", alignItems: "center", gap: "8px" }}><span style={{ width: "10px", height: "10px", borderRadius: "50%", background: PIE_COLORS[i], flexShrink: 0 }} /><strong style={{ color: "#F5F0E8" }}>{row.position}</strong></div></td>
                     <td style={LC.tdNum}><span style={{ color: "#F59E0B" }}>{fmtMoney(row.wage)}/hr</span></td>
                     <td style={LC.tdNum}>{row.hours.toFixed(1)}</td>
                     <td style={LC.tdNum}><strong style={{ color: "#F59E0B" }}>{fmtMoney(row.cost)}</strong></td>
                     <td style={LC.tdNum}>{row.shifts}</td>
-                    <td style={{ ...LC.tdNum }}>
+                    <td style={LC.tdNum}>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                         <div style={{ flex: 1, height: "6px", background: "#1A1A1A", borderRadius: "3px", overflow: "hidden" }}>
                           <div style={{ width: `${labor.totalCost > 0 ? (row.cost / labor.totalCost) * 100 : 0}%`, height: "100%", background: PIE_COLORS[i], borderRadius: "3px" }} />
                         </div>
-                        <span style={{ fontSize: "0.75rem", color: "#888", minWidth: "32px" }}>
-                          {labor.totalCost > 0 ? ((row.cost / labor.totalCost) * 100).toFixed(0) : 0}%
-                        </span>
+                        <span style={{ fontSize: "0.75rem", color: "#888", minWidth: "32px" }}>{labor.totalCost > 0 ? ((row.cost / labor.totalCost) * 100).toFixed(0) : 0}%</span>
                       </div>
                     </td>
                   </tr>
@@ -723,15 +937,13 @@ function LaborCostView({ shifts, staff, positions, setPositions, POSITIONS, POSI
                 <CartesianGrid strokeDasharray="3 3" stroke="#1A1A1A" />
                 <XAxis dataKey="name" tick={{ fill: "#888", fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={fmtMoneyK} tick={{ fill: "#666", fontSize: 11 }} axisLine={false} tickLine={false} width={50} />
-                <Tooltip
-                  contentStyle={{ background: "#111", border: "1px solid #2A2A2A", borderRadius: "8px", fontSize: "0.8rem" }}
+                <Tooltip contentStyle={{ background: "#111", border: "1px solid #2A2A2A", borderRadius: "8px", fontSize: "0.8rem" }}
                   labelStyle={{ color: "#F5F0E8", fontWeight: 600 }}
                   formatter={(v, n) => [n === "cost" ? fmtMoney(v) : `${v.toFixed(1)} hrs`, n === "cost" ? "Labor Cost" : "Hours"]} />
                 <Bar dataKey="cost" fill="#7C3AED" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
-
           <div style={LC.tableCard}>
             <table style={LC.table}>
               <thead>
@@ -742,21 +954,8 @@ function LaborCostView({ shifts, staff, positions, setPositions, POSITIONS, POSI
                   const avgWage = emp.hours > 0 ? emp.cost / emp.hours : 0;
                   return (
                     <tr key={emp.id} style={i % 2 === 0 ? {} : { background: "#0A0A0A" }}>
-                      <td style={LC.td}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
-                          <div style={{ ...S.avatar, width: "28px", height: "28px", fontSize: "0.7rem", flexShrink: 0 }}>{initials(emp.name)}</div>
-                          <strong style={{ color: "#F5F0E8", fontSize: "0.85rem" }}>{emp.name}</strong>
-                        </div>
-                      </td>
-                      <td style={LC.td}>
-                        <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-                          {emp.positions.map(p => (
-                            <span key={p} style={{ padding: "1px 7px", borderRadius: "10px", fontSize: "0.68rem", background: POSITION_COLORS[p].bg, color: POSITION_COLORS[p].text }}>
-                              {p}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
+                      <td style={LC.td}><div style={{ display: "flex", alignItems: "center", gap: "9px" }}><div style={{ ...S.avatar, width: "28px", height: "28px", fontSize: "0.7rem", flexShrink: 0 }}>{initials(emp.name)}</div><strong style={{ color: "#F5F0E8", fontSize: "0.85rem" }}>{emp.name}</strong></div></td>
+                      <td style={LC.td}><div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>{emp.positions.map(p => (<span key={p} style={{ padding: "1px 7px", borderRadius: "10px", fontSize: "0.68rem", background: POSITION_COLORS[p]?.bg || "#1A1A1A", color: POSITION_COLORS[p]?.text || "#888" }}>{p}</span>))}</div></td>
                       <td style={LC.tdNum}>{emp.shifts}</td>
                       <td style={LC.tdNum}>{emp.hours.toFixed(1)}</td>
                       <td style={LC.tdNum}><span style={{ color: "#F59E0B" }}>{fmtMoney(avgWage)}/hr</span></td>
@@ -766,9 +965,7 @@ function LaborCostView({ shifts, staff, positions, setPositions, POSITIONS, POSI
                           <div style={{ flex: 1, height: "4px", background: "#1A1A1A", borderRadius: "2px", overflow: "hidden" }}>
                             <div style={{ width: `${labor.totalCost > 0 ? (emp.cost / labor.totalCost) * 100 : 0}%`, height: "100%", background: "#7C3AED", borderRadius: "2px" }} />
                           </div>
-                          <span style={{ fontSize: "0.75rem", color: "#888", minWidth: "32px" }}>
-                            {labor.totalCost > 0 ? ((emp.cost / labor.totalCost) * 100).toFixed(0) : 0}%
-                          </span>
+                          <span style={{ fontSize: "0.75rem", color: "#888", minWidth: "32px" }}>{labor.totalCost > 0 ? ((emp.cost / labor.totalCost) * 100).toFixed(0) : 0}%</span>
                         </div>
                       </td>
                     </tr>
@@ -777,11 +974,37 @@ function LaborCostView({ shifts, staff, positions, setPositions, POSITIONS, POSI
               </tbody>
               <tfoot>
                 <tr style={{ borderTop: "1px solid #2A2A2A" }}>
-                  <td style={{ ...LC.td, color: "#888", fontSize: "0.75rem" }} colSpan={2}><strong>TOTAL</strong></td>
+                  <td style={{ ...LC.td, color: "#888", fontSize: "0.75rem" }} colSpan={2}><strong>HOURLY SUBTOTAL</strong></td>
                   <td style={LC.tdNum}><strong>{shifts.length}</strong></td>
                   <td style={LC.tdNum}><strong>{labor.totalHours.toFixed(1)}</strong></td>
                   <td style={LC.tdNum}>{labor.totalHours > 0 ? <span style={{ color: "#F59E0B" }}>{fmtMoney(labor.totalCost / labor.totalHours)}/hr</span> : "—"}</td>
                   <td style={LC.tdNum}><strong style={{ color: "#F59E0B" }}>{fmtMoney(labor.totalCost)}</strong></td>
+                  <td style={LC.tdNum}>—</td>
+                </tr>
+                {labor.totalSalaryCost > 0 && (
+                  <tr style={{ background: "#7C3AED11" }}>
+                    <td style={LC.td} colSpan={2}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "9px" }}>
+                        <span style={{ fontSize: "1rem" }}>💼</span>
+                        <div>
+                          <strong style={{ color: "#C4B5FD", fontSize: "0.82rem" }}>Salary Overhead</strong>
+                          <span style={{ color: "#555", fontSize: "0.68rem", marginLeft: "6px" }}>{fmtMoney(budget.dailySalary)}/day × 7</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td style={LC.tdNum}><span style={{ color: "#555" }}>—</span></td>
+                    <td style={LC.tdNum}><span style={{ color: "#555" }}>—</span></td>
+                    <td style={LC.tdNum}><span style={{ color: "#C4B5FD" }}>{fmtMoney(budget.dailySalary)}/day</span></td>
+                    <td style={LC.tdNum}><strong style={{ color: "#C4B5FD" }}>{fmtMoney(labor.totalSalaryCost)}</strong></td>
+                    <td style={LC.tdNum}><span style={{ color: "#555", fontSize: "0.72rem" }}>salary</span></td>
+                  </tr>
+                )}
+                <tr style={{ borderTop: "1px solid #2A2A2A", background: "#141414" }}>
+                  <td style={{ ...LC.td, color: "#F5F0E8", fontSize: "0.75rem" }} colSpan={2}><strong>TOTAL LABOR</strong></td>
+                  <td style={LC.tdNum}><strong>{shifts.length}</strong></td>
+                  <td style={LC.tdNum}><strong>{labor.totalHours.toFixed(1)}</strong></td>
+                  <td style={LC.tdNum}>{labor.totalHours > 0 ? <span style={{ color: "#F59E0B" }}>{fmtMoney(labor.totalLaborCost / labor.totalHours)}/hr</span> : "—"}</td>
+                  <td style={LC.tdNum}><strong style={{ color: "#F59E0B" }}>{fmtMoney(labor.totalLaborCost)}</strong></td>
                   <td style={LC.tdNum}>100%</td>
                 </tr>
               </tfoot>
@@ -823,8 +1046,26 @@ function LaborCostView({ shifts, staff, positions, setPositions, POSITIONS, POSI
                 </div>
               </div>
               <div style={{ padding: "10px 14px", background: "#0A0A0A", borderRadius: "8px", fontSize: "0.78rem", color: "#555", lineHeight: 1.5 }}>
-                Current labor cost: <strong style={{ color: "#F59E0B" }}>{fmtMoney(labor.totalCost)}</strong> ({laborPct.toFixed(1)}% of revenue).
+                Current projected labor: <strong style={{ color: "#F59E0B" }}>{fmtMoney(labor.totalCost)}</strong>.
                 Goal: <strong style={{ color: "#7C3AED" }}>{draftBudget.laborPctGoal}%</strong> → {fmtMoney((draftBudget.weeklyRevenue * draftBudget.laborPctGoal) / 100)}
+              </div>
+
+              {/* Salary section */}
+              <div style={{ height: "1px", background: "#1A1A1A" }} />
+              <div style={{ fontSize: "0.75rem", color: "#555", textTransform: "uppercase", letterSpacing: "0.07em" }}>💼 Salary Overhead</div>
+              <div style={S.formRow}>
+                <label style={S.formLabel}>Daily Salary Cost</label>
+                <div style={{ position: "relative" }}>
+                  <span style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#555" }}>$</span>
+                  <input type="number" min="0" step="10" placeholder="0.00"
+                    style={{ ...S.formInput, paddingLeft: "22px" }}
+                    value={draftBudget.dailySalary ?? ""}
+                    onChange={e => setDraftBudget(b => ({ ...b, dailySalary: parseFloat(e.target.value) || 0 }))} />
+                </div>
+              </div>
+              <div style={{ padding: "8px 12px", background: "#0A0A0A", borderRadius: "7px", fontSize: "0.78rem", color: "#555", lineHeight: 1.6 }}>
+                Weekly salary (×7): <strong style={{ color: "#C4B5FD" }}>{fmtMoney((parseFloat(draftBudget.dailySalary) || 0) * 7)}</strong>
+                {" · "}Total projected labor: <strong style={{ color: "#F59E0B" }}>{fmtMoney(labor.totalCost + (parseFloat(draftBudget.dailySalary) || 0) * 7)}</strong>
               </div>
             </div>
             <div style={S.modalFooter}>
@@ -837,6 +1078,7 @@ function LaborCostView({ shifts, staff, positions, setPositions, POSITIONS, POSI
     </div>
   );
 }
+
 
 function KpiCard({ label, value, sub, accent, icon, highlight }) {
   return (
@@ -853,12 +1095,12 @@ function KpiCard({ label, value, sub, accent, icon, highlight }) {
 
 // ─── STAFF MANAGEMENT VIEW ───────────────────────────────────────────────────
 
-function StaffManagementView({ staff, positions, POSITION_COLORS, COLOR_POOL, onAddStaff, onEditStaff, onRemoveStaff, onAddPosition, onEditPosition, onRemovePosition }) {
+function StaffManagementView({ staff, positions, POSITION_COLORS, COLOR_POOL, currentUser, onAddStaff, onEditStaff, onRemoveStaff, onAddPosition, onEditPosition, onRemovePosition }) {
   const [activeTab, setActiveTab] = useState("roster");
   const [staffModal, setStaffModal] = useState(null);
   const [posModal, setPosModal]   = useState(null);
   const [confirmRemove, setConfirmRemove] = useState(null);
-  const [newCredential, setNewCredential] = useState(null); // { name, password } shown after add
+  const [newCredential, setNewCredential] = useState(null);
   const [copied, setCopied] = useState(false);
 
   const employees = staff.filter(s => s.role === "employee");
@@ -894,13 +1136,23 @@ function StaffManagementView({ staff, positions, POSITION_COLORS, COLOR_POOL, on
         <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
           {/* Managers */}
           <div>
-            <div style={{ fontSize: "0.72rem", color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>Managers</div>
+            <div style={{ fontSize: "0.72rem", color: "#555", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: "10px" }}>Managers ({managers.length})</div>
             <div style={{ display: "flex", flexDirection: "column", gap: "7px" }}>
-              {managers.map(m => (
-                <StaffRow key={m.id} member={m} POSITION_COLORS={POSITION_COLORS}
-                  onEdit={() => setStaffModal({ mode: "edit", member: m })}
-                  onRemove={null /* can't remove managers from this UI */} />
-              ))}
+              {managers.map(m => {
+                const isSelf = m.id === currentUser.id;
+                const isLastManager = managers.length <= 1;
+                const removeDisabledReason = isSelf
+                  ? "You can't remove your own account"
+                  : isLastManager
+                  ? "At least one manager must remain"
+                  : null;
+                return (
+                  <StaffRow key={m.id} member={m} POSITION_COLORS={POSITION_COLORS}
+                    onEdit={() => setStaffModal({ mode: "edit", member: m })}
+                    onRemove={removeDisabledReason ? null : () => setConfirmRemove({ type: "staff", id: m.id, name: m.name })}
+                    removeDisabledReason={removeDisabledReason} />
+                );
+              })}
             </div>
           </div>
 
@@ -1065,7 +1317,7 @@ function StaffManagementView({ staff, positions, POSITION_COLORS, COLOR_POOL, on
   );
 }
 
-function StaffRow({ member, POSITION_COLORS, onEdit, onRemove }) {
+function StaffRow({ member, POSITION_COLORS, onEdit, onRemove, removeDisabledReason }) {
   const [showPw, setShowPw] = useState(false);
   return (
     <div style={{ display: "flex", alignItems: "center", gap: "14px", padding: "12px 16px", background: "#0F0F0F", borderRadius: "9px", border: "1px solid #1A1A1A" }}>
@@ -1094,7 +1346,15 @@ function StaffRow({ member, POSITION_COLORS, onEdit, onRemove }) {
       <span style={{ fontSize: "0.72rem", color: "#444", textTransform: "capitalize", marginRight: "4px" }}>{member.role}</span>
       <div style={{ display: "flex", gap: "6px" }}>
         <button style={S.ghostBtn} onClick={onEdit}>Edit</button>
-        {onRemove && <button style={{ ...S.ghostBtn, color: "#FCA5A5", borderColor: "#DC262633" }} onClick={onRemove}>Remove</button>}
+        {onRemove && (
+          <button style={{ ...S.ghostBtn, color: "#FCA5A5", borderColor: "#DC262633" }} onClick={onRemove}>Remove</button>
+        )}
+        {!onRemove && removeDisabledReason && (
+          <button disabled title={removeDisabledReason}
+            style={{ ...S.ghostBtn, color: "#333", borderColor: "#1A1A1A", cursor: "not-allowed", opacity: 0.4 }}>
+            Remove
+          </button>
+        )}
       </div>
     </div>
   );
@@ -2193,7 +2453,7 @@ const S = {
 
 // Labor Cost specific styles
 const LC = {
-  kpiRow: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "12px", marginBottom: "20px" },
+  kpiRow: { display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px", marginBottom: "20px" },
   kpiCard: { background: "#0F0F0F", border: "1px solid #1E1E1E", borderRadius: "12px", padding: "16px 18px" },
   progressWrap: { background: "#0F0F0F", border: "1px solid #1E1E1E", borderRadius: "10px", padding: "14px 18px", marginBottom: "24px" },
   progressTrack: { height: "8px", background: "#1A1A1A", borderRadius: "4px", overflow: "visible", position: "relative" },
