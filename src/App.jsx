@@ -16,11 +16,12 @@ const COLOR_POOL = [
 ];
 
 const INITIAL_POSITIONS = [
-  { name: "Bartender",   colorIdx: 0, wage: 18 },
-  { name: "Server",      colorIdx: 1, wage: 12 },
-  { name: "Busser",      colorIdx: 2, wage: 14 },
-  { name: "Host",        colorIdx: 3, wage: 15 },
-  { name: "Food Runner", colorIdx: 4, wage: 13 },
+  { name: "Bartender",    colorIdx: 0, wage: 18 },
+  { name: "Server",       colorIdx: 1, wage: 12 },
+  { name: "Busser",       colorIdx: 2, wage: 14 },
+  { name: "Host",         colorIdx: 3, wage: 15 },
+  { name: "Food Runner",  colorIdx: 4, wage: 13 },
+  { name: "Receptionist", colorIdx: 5, wage: 15 },
 ];
 
 // Default weekly revenue budget target and labor cost % goal
@@ -67,6 +68,18 @@ const INITIAL_STAFF = [
   { id: 8,  name: "Drew Martinez", role: "employee", password: "AmberKnife64",  positions: ["Bartender","Server"],    availability: { 0:"available",1:"preferred",2:"available",3:"available",4:"preferred",5:"preferred",6:"preferred" } },
   { id: 9,  name: "Riley Chen",    role: "employee", password: "NovaBasil38",   positions: ["Food Runner","Busser"],  availability: { 0:"preferred",1:"available",2:"preferred",3:"unavailable",4:"available",5:"available",6:"available" } },
   { id: 10, name: "Morgan Walsh",  role: "employee", password: "KeenSpoon91",   positions: ["Host","Server"],         availability: DEFAULT_AVAILABILITY },
+  { id: 11, name: "Nicole Pitt",      role: "employee", password: "BriskLemon47",  positions: ["Server"],                          availability: DEFAULT_AVAILABILITY },
+  { id: 12, name: "Courtney Kurpita", role: "employee", password: "CalmThyme83",   positions: ["Server"],                          availability: DEFAULT_AVAILABILITY },
+  { id: 13, name: "River Walsh",      role: "employee", password: "ZestKnife29",   positions: ["Server","Bartender"],              availability: DEFAULT_AVAILABILITY },
+  { id: 14, name: "Cameron Todd",     role: "employee", password: "NovaFlame61",   positions: ["Server","Bartender"],              availability: DEFAULT_AVAILABILITY },
+  { id: 15, name: "Keoni Gandalf",    role: "employee", password: "AmberBasil74",  positions: ["Busser"],                          availability: DEFAULT_AVAILABILITY },
+  { id: 16, name: "Shantel Hardy",    role: "employee", password: "SageGlass52",   positions: ["Host","Receptionist"],             availability: DEFAULT_AVAILABILITY },
+  { id: 17, name: "Branden Gallegos", role: "employee", password: "SwiftClove38",  positions: ["Server","Busser","Bartender"],     availability: DEFAULT_AVAILABILITY },
+  { id: 18, name: "Nathan Nobriga",   role: "employee", password: "KeenBasil96",   positions: ["Food Runner","Host","Busser"],     availability: DEFAULT_AVAILABILITY },
+  { id: 19, name: "Oshen Nobriga",    role: "employee", password: "BoldSpoon15",   positions: ["Busser"],                          availability: DEFAULT_AVAILABILITY },
+  { id: 20, name: "Heather Eckhart",  role: "employee", password: "CrispPlate67",  positions: ["Server"],                          availability: DEFAULT_AVAILABILITY },
+  { id: 21, name: "Annette Marion",   role: "employee", password: "ZestLemon44",   positions: ["Server"],                          availability: DEFAULT_AVAILABILITY },
+  { id: 22, name: "Amylia Gandalf",   role: "employee", password: "NovaGlass88",   positions: ["Host"],                            availability: DEFAULT_AVAILABILITY },
 ];
 
 // Seed shifts for the current week (Sun-based). Each shift stores a real date string.
